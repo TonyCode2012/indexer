@@ -1,5 +1,9 @@
 import Bluebird from "bluebird";
-import { getNextNFT2Update, updateWaitingNFTStatus } from "../operation/api";
+import {
+  getNextNFT2Update,
+  updateWaitingNFTStatus,
+  updateAchievementStatus,
+} from "../operation/api";
 import { makeIntervalTask } from "./task-utils";
 import { NFTStatus } from "../types/nfts.d";
 import { AppContext } from "../types/context.d";
@@ -28,10 +32,18 @@ async function handleNFT(
         id: res.id,
         tokenId: tokenId,
       };
-      const updated = await updateWaitingNFTStatus(nftStatus);
-      logger.info(`Updated status ${updated}`);
       const metaPath = generateMetadata(res, tokenId);
       logger.info(`Generate metadata succussfully in ${metaPath}`);
+      const updated = await updateWaitingNFTStatus(nftStatus);
+      logger.info(
+        `Updated nft status ${JSON.stringify(updated)} with tokenId ${tokenId}`
+      );
+      const rst = await updateAchievementStatus(res.id);
+      logger.info(
+        `Updated achievements status ${JSON.stringify(rst)} with profile id ${
+          res.id
+        }`
+      );
     } else {
       logger.info("No waiting nft to update tokenid");
     }

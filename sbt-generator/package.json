@@ -7,12 +7,7 @@
     "debug": "env-cmd -f .env nodemon src/main.ts",
     "start": "cp -r src/abis build/src && env-cmd -f .env node --trace-warnings build/src/main.js",
     "build": "tsc -p ./",
-    "generate": "graphql-codegen",
-    "profiles": "env-cmd -f .env ts-node ./src/operation/get-profiles",
-    "publications": "env-cmd -f .env ts-node ./src/operation/get-publications",
-    "test": "env-cmd -f .env ts-node ./src/indexer/index",
-    "test-mint": "nodemon src/operation/mint-nft.ts",
-    "explore:explore-publications": "env-cmd -f .env ts-node ./src/explore/explore-publications"
+    "update:url": "env-cmd -f .env npx hardhat run scripts/update_base_url.ts"
   },
   "authors": [
     "qiufan_glamour@hotmail.com"
