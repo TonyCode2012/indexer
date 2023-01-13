@@ -29,3 +29,12 @@ export async function updateWaitingNFTStatus(nftStatus: NFTStatus) {
   const response = await axios(updateWaitingNFT);
   return response.data;
 }
+
+export async function updateAchievementStatus(profileId: string) {
+  const updateAchievementStatus: AxiosRequestConfig = {
+    method: "post",
+    url: `${API_URL}/api/v0/achievement/achieve?id=` + profileId,
+  };
+  const response = await axios(updateAchievementStatus);
+  return response.data;
+}
