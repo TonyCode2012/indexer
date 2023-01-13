@@ -25,6 +25,9 @@ const config: HardhatUserConfig = {
       accounts: [PRIVATE_KEY.substring(2)],
     },
   },
+  typechain: {
+    outDir: "src/typechain-types",
+  },
   etherscan: {
     apiKey: SCAN_API_KEY,
   },

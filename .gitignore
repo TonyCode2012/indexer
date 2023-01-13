@@ -5,6 +5,9 @@ sbt-generator/.env
 sbt-generator/cache
 
 yarn.log
+yarn-error.log
 
 nosocial-sbt-generator-combined.log
 nosocial-sbt-generator-error.log
+
+
