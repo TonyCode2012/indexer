@@ -1,4 +1,10 @@
-yarn.log
-package-lock.json
-
 node_modules
+build
+
+sbt-generator/.env
+sbt-generator/cache
+
+yarn.log
+
+nosocial-sbt-generator-combined.log
+nosocial-sbt-generator-error.log
