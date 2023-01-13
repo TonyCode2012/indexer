@@ -35,9 +35,15 @@ async function handleNFT(
       const metaPath = generateMetadata(res, tokenId);
       logger.info(`Generate metadata succussfully in ${metaPath}`);
       const updated = await updateWaitingNFTStatus(nftStatus);
-      logger.info(`Updated nft status ${updated}`);
+      logger.info(
+        `Updated nft status ${JSON.stringify(updated)} with tokenId ${tokenId}`
+      );
       const rst = await updateAchievementStatus(res.id);
-      logger.info(`Updated achievements status ${rst}`);
+      logger.info(
+        `Updated achievements status ${JSON.stringify(rst)} with profile id ${
+          res.id
+        }`
+      );
     } else {
       logger.info("No waiting nft to update tokenid");
     }
