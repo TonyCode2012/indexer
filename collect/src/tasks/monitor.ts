@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { AppContext } from '../types/context.d';
 import { DbOperator } from '../types/database.d';
 import { createDBOperator } from '../db/operator';
-import { getProfiles } from '../operation';
+import { getProfiles, queryPublications } from '../operation';
 import { makeIntervalTask } from './task-utils';
 import { Logger } from 'winston';
 import { SimpleTask } from '../types/tasks.d';
@@ -68,11 +68,21 @@ export async function handleMonitor(
     }
 
     let profileIds: string[] = [];
+    let pubIds: string[] = [];
     // Get lens hub logs
     const lensHubLogs = await provider.getLogs(lensHubFilter);
     for (const log of lensHubLogs) {
       const event = lensHubIface.parseLog(log);
-      profileIds.push(event.args.profileId._hex)
+      const profileId = event.args.profileId._hex;
+      profileIds.push(profileId);
+      if (event.args.pubId) {
+        const pubId = event.args.pubId._hex;
+        if (pubId.includes("-")) {
+          pubIds.push(pubId);
+        } else {
+          pubIds.push(profileId + "-" + pubId);
+        }
+      }
     }
     // Get lens periphery logs
     const lensPeripheryLogs = await provider.getLogs(lensPeripheryFilter);
@@ -82,13 +92,14 @@ export async function handleMonitor(
         profileIds.push(event.args.profileId._hex)
       } else if (event.args.hasOwnProperty('profileIds')) {
         for (const id of event.args.profileIds) {
-          profileIds.push(id._hex)
+          profileIds.push(id._hex);
         }
       }
     }
     profileIds = Array.from(new Set(profileIds));
-    logger.info(`Get new profile number:${profileIds.length}`);
-    await updateProfiles(context, profileIds, isStopped);
+    pubIds = Array.from(new Set(pubIds));
+    logger.info(`Get profile number:${profileIds.length}, publication number:${pubIds.length}`);
+    await updateData(context, profileIds, pubIds, isStopped);
     await dbOperator.setSyncedBlockNumber(toBlock);
   } catch (e: any) {
     logger.error(`Get logs from polychain failed,error:${e}.`);
@@ -111,6 +122,18 @@ export async function createMonitorTask(
   )
 }
 
+async function updateData(
+  context: AppContext, 
+  profileIds: string[], 
+  pubIds: string[],
+  isStopped: IsStopped,
+): Promise<void> {
+  const promises: Promise<void>[] = [];
+  promises.push(updateProfiles(context, profileIds, isStopped));
+  promises.push(updatePublications(context, pubIds, isStopped));
+  await Bluebird.map(promises, async (promise: any) => await promise);
+}
+
 async function updateProfiles(
   context: AppContext, 
   profileIds: string[], 
@@ -126,13 +149,11 @@ async function updateProfiles(
         profileIds: profileIds.slice(offset,offset+LENS_DATA_LIMIT),
         limit: LENS_DATA_LIMIT,
       })
-
-      await dbOperator.insertProfiles(profiles.items);
-
-      if (profiles.items.length < LENS_DATA_LIMIT) {
-        break;
-      }
-
+      //await dbOperator.insertProfiles(profiles.items);
+      await Bluebird.map(profiles.items, async (profile: any) => {
+        if (!isStopped)
+          await dbOperator.updateProfile(profile);
+      }, { concurrency: MAX_TASK/2});
       offset = offset + LENS_DATA_LIMIT;
     } catch (e: any) {
       logger.error(`Get profiles failed,error:${e}`);
@@ -143,12 +164,32 @@ async function updateProfiles(
         await Bluebird.delay(5 * 60 * 1000);
     }
   }
+}
 
-  // Update publications
-  context.timestamp = getTimestamp();
-  await Bluebird.map(profileIds, async (id) => {
-    if (!isStopped()) {
-      await getPublication(context, id);
+async function updatePublications(
+  context: AppContext,
+  pubIds: string[],
+  isStopped: IsStopped,
+): Promise<void> {
+  const logger = context.logger;
+  const dbOperator = createDBOperator(context.database);
+  let offset = 0;
+  while (offset < pubIds.length) {
+    try {
+      await Bluebird.delay(1 * 1000);
+      const { publications } = await queryPublications({
+        publicationIds: pubIds.slice(offset,offset+LENS_DATA_LIMIT),
+        limit: LENS_DATA_LIMIT,
+      })
+      await dbOperator.insertPublications(publications.items);
+      offset = offset + LENS_DATA_LIMIT;
+    } catch (e: any) {
+      logger.error(`Get publications failed,error:${e}`);
+      if (e.statusCode === 404)
+        break;
+
+      if (e.networkError.statusCode === 429)
+        await Bluebird.delay(5 * 60 * 1000);
     }
-  }, { concurrency: MAX_TASK/2 });
+  }
 }

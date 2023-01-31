@@ -46,6 +46,7 @@ export const AchievementsTmpls = {
     }
     const res: string[] = [];
     // ***NOTE***: why number of posts not equal to the one fetched from lens api
+    /*
     const query = ((appIds: string[]) => {
       if (appIds[0] === 'all') {
         return { 
@@ -62,13 +63,15 @@ export const AchievementsTmpls = {
       query,
       { _id: 1 },
     ).toArray();
-    /*
+    */
     const stages = ((appIds: string[]) => {
       const stageArray: any[] = [];
       if (appIds[0] !== 'all') {
         stageArray.push({
           $match: {
+            __typename: 'Post',
             appId: { $in: appIds },
+            createdAt: { $gte: startedAt },
           }
         });
       }
@@ -77,18 +80,17 @@ export const AchievementsTmpls = {
           $group: {
             _id: "$profile.id",
             num: { $sum: 1 },
-          },
+          }
         },
         { 
           $match: {
             num: { $gte: num },
-          },
+          }
         },
       ]);
       return stageArray;
     })(appIds);
-    const ids = await context.database.dbHandler.collection(PUBLICATION_COLL).aggregate(stages);
-    */
+    const ids = await context.database.dbHandler.collection(PUBLICATION_COLL).aggregate(stages).toArray();
     for (const { _id } of ids) {
       res.push(_id);
     }
@@ -101,21 +103,20 @@ export const AchievementsTmpls = {
     }
     const logger = context.logger;
     //const startDate = Dayjs().subtract(num-1, 'day').format('YYYY-MM-DD');
-    const startDate = Dayjs('2022-12-01').format('YYYY-MM-DD');
     const res: string[] = [];
     const stages = ((appIds: string[]) => {
       const stageArray: any[] = [];
       if (appIds[0] === 'all') {
         stageArray.push({
           $match: {
-            createdAt: { $gte: startDate },
+            createdAt: { $gte: startedAt },
           }
         });
       } else {
         stageArray.push({
           $match: {
             appId: { $in: appIds },
-            createdAt: { $gte: startDate },
+            createdAt: { $gte: startedAt },
           }
         });
       }
@@ -195,6 +196,7 @@ export const TasksTmpls = {
     }
     const res: string[] = [];
     // ***NOTE***: why number of posts not equal to the one fetched from lens api
+    /*
     const query = ((appIds: string[]) => {
       if (appIds[0] === 'all') {
         return { 
@@ -211,6 +213,34 @@ export const TasksTmpls = {
       query,
       { _id: 1 },
     ).toArray();
+    */
+    const stages = ((appIds: string[]) => {
+      const stageArray: any[] = [];
+      if (appIds[0] !== 'all') {
+        stageArray.push({
+          $match: {
+            __typename: 'Post',
+            appId: { $in: appIds },
+            createdAt: { $gte: startedAt },
+          }
+        });
+      }
+      stageArray.push(...[
+        {
+          $group: {
+            _id: "$profile.id",
+            num: { $sum: 1 },
+          }
+        },
+        { 
+          $match: {
+            num: { $gte: num },
+          }
+        },
+      ]);
+      return stageArray;
+    })(appIds);
+    const ids = await context.database.dbHandler.collection(PUBLICATION_COLL).aggregate(stages).toArray();
     for (const { _id } of ids) {
       res.push(_id);
     }
@@ -223,21 +253,21 @@ export const TasksTmpls = {
     }
     const logger = context.logger;
     const formatter = 'YYYY-MM-DD';
-    const startDate = Dayjs('2022-12-01').format(formatter);
+    //const startDate = Dayjs('2022-12-01').format(formatter);
     const res: string[] = [];
     const stages = ((appIds: string[]) => {
       const stageArray: any[] = [];
       if (appIds[0] === 'all') {
         stageArray.push({
           $match: {
-            createdAt: { $gte: startDate },
+            createdAt: { $gte: startedAt },
           }
         });
       } else {
         stageArray.push({
           $match: {
             appId: { $in: appIds },
-            createdAt: { $gte: startDate },
+            createdAt: { $gte: startedAt },
           }
         });
       }

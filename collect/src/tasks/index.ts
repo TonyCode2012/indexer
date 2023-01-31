@@ -40,9 +40,9 @@ export async function createSimpleTasks(
     createProfileTask,
     createPublicationTask,
     createWhitelistTask,
-    createMonitorTask,
     createAchievementTask,
     createTasksTask,
+    createMonitorTask,
   ];
   return Bluebird.mapSeries(tasks, (t) => {
     return t(context, logger);

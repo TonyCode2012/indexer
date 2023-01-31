@@ -73,10 +73,10 @@ export async function handlePublications(
   context.logger = logger;
   try {
     const ids = await dbOperator.getProfileIdsWithLimit();
-    if (ids.length === 0) {
-      logger.info('set timestamp');
-      await dbOperator.setLastUpdateTimestamp(getTimestamp());
-    }
+    //if (ids.length === 0) {
+    //  logger.info('set timestamp');
+    //  await dbOperator.setLastUpdateTimestamp(getTimestamp());
+    //}
     await Bluebird.map(ids, async (id: any) => {
       if (!isStopped()) {
         await getPublication(context, id)

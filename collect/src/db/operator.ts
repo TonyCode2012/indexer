@@ -154,7 +154,8 @@ export function createDBOperator(db: MongoDB): DbOperator {
   const updateProfile = async (data: any): Promise<void> => {
     const query = { _id: data._id };
     const options = { upsert: true };
-    await db.dbHandler.collection(PROFILE_COLL).replaceOne(query, data, options);
+    await db.dbHandler.collection(PROFILE_COLL).updateOne(query, { $set: data }, options);
+    //await db.dbHandler.collection(PROFILE_COLL).replaceOne(query, data, options);
   }
 
   const updateProfileTimestamp = async (id: string, timestamp: number): Promise<void> => {
@@ -203,7 +204,7 @@ export function createDBOperator(db: MongoDB): DbOperator {
         $or: [
           {publicationCursor: {$exists: false}},
           {lastUpdateTimestamp: {$exists: false}},
-          {lastUpdateTimestamp: {$lt: lastUpdateTimestamp}},
+          //{lastUpdateTimestamp: {$lt: lastUpdateTimestamp}},
         ]
       },
       {
@@ -232,20 +233,23 @@ export function createDBOperator(db: MongoDB): DbOperator {
   }
 
   const setStartBlockNumber = async (): Promise<void> => {
-    try {
-      const res = await db.dbHandler.collection(CURSOR_COLL).findOne({_id:'startBlock'});
-      if (res !== null)
-        return;
+    let tryout = 3;
+    while (--tryout >= 0) {
+      try {
+        const res = await db.dbHandler.collection(CURSOR_COLL).findOne({_id:'startBlock'});
+        if (res !== null)
+          return;
 
-      const provider = new ethers.providers.JsonRpcProvider(POLYGON_ENDPOINT);
-      const startBlockNumber = await provider.getBlockNumber();
-      logger.info(`Set monitor start block number to ${startBlockNumber}`);
-      const query = { _id: 'startBlock' };
-      const updateData = { value: startBlockNumber };
-      const options = { upsert: true }; 
-      await db.dbHandler.collection(CURSOR_COLL).updateOne(query, { $set: updateData }, options);
-    } catch (e: any) {
-      logger.error(`Update start block number failed, message:${e}`);
+        const provider = new ethers.providers.JsonRpcProvider(POLYGON_ENDPOINT);
+        const startBlockNumber = await provider.getBlockNumber();
+        logger.info(`Set monitor start block number to ${startBlockNumber}`);
+        const query = { _id: 'startBlock' };
+        const updateData = { value: startBlockNumber };
+        const options = { upsert: true }; 
+        await db.dbHandler.collection(CURSOR_COLL).updateOne(query, { $set: updateData }, options);
+      } catch (e: any) {
+        logger.error(`Update start block number failed, message:${e}`);
+      }
     }
   }
 

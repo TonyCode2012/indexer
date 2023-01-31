@@ -10,7 +10,7 @@ import { API_BASE_URI, TIMEOUT } from '../config';
 import { IsStopped, makeIntervalTask } from './task-utils';
 
 export enum AchievementStatus {
-  NOTSTART = 'notStart',
+  INPROGRESS = 'inProgress',
   READY = 'ready',
   UNCLAIMED = 'unclaimed',
   CLAIMING = 'claiming',
