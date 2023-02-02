@@ -43,13 +43,14 @@ export async function handleMonitor(
   const lensHubIface = new ethers.utils.Interface(LENS_HUB_EVENT_ABI);
   const lensPeripheryIface = new ethers.utils.Interface(LENS_PERIPHERY_EVENT_ABI);
   let toBlock = fromBlock + 2000;
-  logger.info(`from:${fromBlock}, to:${toBlock}`)
 
   try {
     const currentBlockNumber = await provider.getBlockNumber();
     if (toBlock > currentBlockNumber) {
       toBlock = currentBlockNumber;
     }
+    logger.info(`from:${fromBlock}, to:${toBlock}`)
+
     const lensHubFilter = {
       address: LENS_HUB_CONTRACT,
       topics: [
@@ -100,6 +101,8 @@ export async function handleMonitor(
     pubIds = Array.from(new Set(pubIds));
     logger.info(`Get profile number:${profileIds.length}, publication number:${pubIds.length}`);
     await updateData(context, profileIds, pubIds, isStopped);
+    if (isStopped) 
+      throw new Error("Stop record break point due to stopped.");
     await dbOperator.setSyncedBlockNumber(toBlock);
   } catch (e: any) {
     logger.error(`Get logs from polychain failed,error:${e}.`);
