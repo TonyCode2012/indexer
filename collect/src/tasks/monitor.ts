@@ -45,8 +45,17 @@ export async function handleMonitor(
   let toBlock = fromBlock + 2000;
 
   try {
-    const currentBlock = await provider.getBlockNumber();
-    if (currentBlock > fromBlock && toBlock > currentBlock) {
+    const currentBlock = await (async (startBlock: number) => {
+      let tryout = 10;
+      while (--tryout >= 0) {
+        const endBlock = await provider.getBlockNumber();
+        if (endBlock >= startBlock) {
+          return endBlock;
+        }
+      }
+      return startBlock;
+    })(fromBlock);
+    if (toBlock > currentBlock) {
       toBlock = currentBlock;
     }
     logger.info(`from:${fromBlock}, to:${toBlock}`)
