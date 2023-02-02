@@ -101,7 +101,7 @@ export async function handleMonitor(
     pubIds = Array.from(new Set(pubIds));
     logger.info(`Get profile number:${profileIds.length}, publication number:${pubIds.length}`);
     await updateData(context, profileIds, pubIds, isStopped);
-    if (isStopped) 
+    if (isStopped()) 
       throw new Error("Stop record break point due to stopped.");
     await dbOperator.setSyncedBlockNumber(toBlock);
   } catch (e: any) {
@@ -154,7 +154,7 @@ async function updateProfiles(
       })
       //await dbOperator.insertProfiles(profiles.items);
       await Bluebird.map(profiles.items, async (profile: any) => {
-        if (!isStopped)
+        if (!isStopped())
           await dbOperator.updateProfile(profile);
       }, { concurrency: MAX_TASK/2});
       offset = offset + LENS_DATA_LIMIT;
