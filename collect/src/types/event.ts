@@ -11,7 +11,7 @@ export const profileUpdateSet = new Set([
   "FollowNFTURISet",
   "FollowModuleSet",
   "ProfileMetadataSet",
-  "Followed",
+  //"Followed",
 ]);
 
 export const pubCreatedSet = new Set([

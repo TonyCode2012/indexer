@@ -80,7 +80,7 @@ export const LENS_DATA_LIMIT = parseInt(getParamOrExit('LENS_DATA_LIMIT'));
 export const MAX_TASK = parseInt(getParamOrExit('MAX_TASK'));
 
 export const TIMEOUT = parseInt(getParam('TIMEOUT') || '300');
-export const HTTP_TIMEOUT = parseInt(getParam('HTTP_TIMEOUT') || '300');
+export const HTTP_TIMEOUT = parseInt(getParam('HTTP_TIMEOUT') || '300000');
 
 export const API_BASE_URI = getParamOrExit('API_BASE_URI');
 

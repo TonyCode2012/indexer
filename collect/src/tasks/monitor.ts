@@ -27,6 +27,7 @@ import {
   POLYGON_ENDPOINT,
   MAX_TASK,
 } from '../config';
+import { Dayjs } from '../utils/datetime';
 
 
 export async function handleMonitor(
@@ -48,7 +49,7 @@ export async function handleMonitor(
   const provider = new ethers.providers.JsonRpcProvider(POLYGON_ENDPOINT);
   const lensHubIface = new ethers.utils.Interface(LENS_HUB_EVENT_ABI);
   const lensPeripheryIface = new ethers.utils.Interface(LENS_PERIPHERY_EVENT_ABI);
-  let toBlock = fromBlock + 2000;
+  let toBlock = fromBlock + 3000;
 
   try {
     const currentBlock = await (async (startBlock: number) => {
@@ -99,6 +100,7 @@ export async function handleMonitor(
     }
     if (isStopped()) 
       throw new Error("Stop record break point due to stopped.");
+    process.exit(-1);
     await dbOperator.setSyncedBlockNumber(toBlock);
   } catch (e: any) {
     logger.error(`Get logs from polychain failed,error:${e}.`);
@@ -110,6 +112,7 @@ async function eventHub(
   event: any,
   isStopped: IsStopped
 ): Promise<void> {
+  //console.log(Dayjs(event.args.timestamp.toNumber()*1000).toISOString());
   const dbOperator = createDBOperator(context.database);
   const profileCreatedArry = [];
   const profileUpdateMap = new Map<string,Array<any>>();

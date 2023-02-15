@@ -171,7 +171,7 @@ export function createDBOperator(db: MongoDB): DbOperator {
     await db.dbHandler.collection(PROFILE_COLL).updateMany(query, update);
   }
 
-  const updateProfileEx = async (query: any, data: any, options: any = { upsert: true }): Promise<void> => {
+  const updateProfileEx = async (query: any, data: any, options?: any): Promise<void> => {
     await db.dbHandler.collection(PROFILE_COLL).updateOne(query, data, options);
   }
 
@@ -181,7 +181,7 @@ export function createDBOperator(db: MongoDB): DbOperator {
     await db.dbHandler.collection(PUBLICATION_COLL).updateOne(query, { $set: data }, options);
   }
 
-  const updatePublicationEx = async (query: any, data: any, options: any = { upsert: true }): Promise<void> => {
+  const updatePublicationEx = async (query: any, data: any, options?: any): Promise<void> => {
     await db.dbHandler.collection(PUBLICATION_COLL).updateOne(query, data, options);
   }
 

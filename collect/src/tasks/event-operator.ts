@@ -11,7 +11,7 @@ export async function profileCreated(
   dbOperator: DbOperator,
   event: any
 ): Promise<void> {
-  await dbOperator.updateProfile({
+  await dbOperator.insertProfile({
     _id: event.args.profileId._hex,
     ownedBy: event.args.to,
     handle: event.args.handle,
@@ -24,7 +24,7 @@ export async function profileCreated(
     //},
     picture: getRealImageUri(event.args.imageURI),
     followModule: event.args.followModule,
-    createdAt: Dayjs(event.args.timestamp.toNumber()).toString(),
+    createdAt: Dayjs(event.args.timestamp.toNumber()*1000).toISOString(),
     dispatcher: null,
     isDefault: false,
   });
@@ -35,7 +35,7 @@ export async function profileMetadataSet(
   dbOperator: DbOperator,
   event: any
 ): Promise<void> {
-  const metadata = await processContentUri(event.args.contentURI);
+  const metadata = await processContentUri(event.args.metadata);
   await dbOperator.updateProfile({
     _id: event.args.profileId._hex,
     name: metadata.name,
@@ -115,6 +115,7 @@ export async function postCreated(
   event: any
 ): Promise<void> {
   const content = await processContentUri(event.args.contentURI);
+  console.log(content)
   await dbOperator.insertPublication({
     _id: event.args.profileId._hex + "-" + event.args.pubId._hex,
     __typename: 'Post',
@@ -129,7 +130,7 @@ export async function postCreated(
     metadata: content,
     collectModule: event.args.collectModule,
     referenceModule: event.args.referenceModule,
-    createdAt: Dayjs(event.args.timestamp.toNumber()).toString(),
+    createdAt: Dayjs(event.args.timestamp.toNumber()*1000).toISOString(),
   });
 }
 
@@ -139,6 +140,7 @@ export async function commentCreated(
 ): Promise<void> {
   const pubId = event.args.profileIdPointed._hex + "-" + event.args.pubIdPointed._hex;
   const content = await processContentUri(event.args.contentURI);
+  console.log(content)
   const commentedPub = await GetPublicationById(dbOperator, pubId);
   await dbOperator.insertPublication({
     _id: pubId,
@@ -155,7 +157,7 @@ export async function commentCreated(
     metadata: content,
     collectModule: event.args.collectModule,
     referenceModule: event.args.referenceModule,
-    createdAt: Dayjs(event.args.timestamp.toNumber()).toString(),
+    createdAt: Dayjs(event.args.timestamp.toNumber()*1000).toISOString(),
   });
 }
 
@@ -177,7 +179,7 @@ export async function mirrorCreated(
     //},
     mirrorOf: { __typename: mirroredPub.__typename, id: mirroredPub._id },
     referenceModule: event.args.referenceModule,
-    createdAt: Dayjs(event.args.timestamp.toNumber()).toString(),
+    createdAt: Dayjs(event.args.timestamp.toNumber()*1000).toISOString(),
   });
 }
 
@@ -199,7 +201,7 @@ export async function followed(
 ): Promise<void> {
   await dbOperator.updateProfiles(
     {
-      $in: event.args.profileIds.map((x: any) => x._hex),
+      _id: { $in: event.args.profileIds.map((x: any) => x._hex) },
     },
     {
       $inc: { "stats.totalFollowers": 1 },
@@ -228,22 +230,29 @@ export async function followNFTTransferred(
   const to = event.args.to;
   const fromDefaultProfile = await dbOperator.getDefaultProfileByAddress(from);
   const toDefaultProfile = await dbOperator.getDefaultProfileByAddress(to);
-  await dbOperator.updateProfileEx(
-    {
-      _id: fromDefaultProfile._id,
-    },
-    {
-      $inc: { "stats.totalFollowing": -1 },
-    },
-  );
-  await dbOperator.updateProfileEx(
-    {
-      _id: toDefaultProfile._id,
-    },
-    {
-      $inc: { "stats.totalFollowing": 1 },
-    },
-  );
+  if (fromDefaultProfile !== null) {
+    await dbOperator.updateProfileEx(
+      {
+        _id: fromDefaultProfile._id,
+      },
+      {
+        $inc: { "stats.totalFollowing": -1 },
+      },
+    );
+  }
+  if (toDefaultProfile !== null) {
+    await dbOperator.updateProfileEx(
+      {
+        _id: toDefaultProfile._id,
+      },
+      {
+        $inc: { "stats.totalFollowing": 1 },
+      },
+    );
+  } 
+  // else {
+  //   logger.error(`Get followNFTTransferred reciever:${to} failed.`);
+  // }
 }
 
 async function processContentUri(uri: string): Promise<any> {
@@ -259,16 +268,20 @@ async function processContentUri(uri: string): Promise<any> {
         logger.error(`Invalid uri:${realUri}`);
         return {};
       }
-      const data = await axiosInstance.get(realUri, {
+      const res = await axiosInstance.get(realUri, {
         timeout: HTTP_TIMEOUT,
       });
+      return res.data;
     } catch (e: any) {
       if (realUri.startsWith(lensInfraUrl)) {
-        return {};
+        logger.error(`process uri:${realUri} failed, error:${e}.`);
+      } else {
+        realUri = lensInfraUrl + realUri.substring(realUri.lastIndexOf("/") + 1, realUri.length);
       }
-      realUri = lensInfraUrl + realUri.substring(realUri.lastIndexOf("/") + 1, realUri.length);
     }
+    await Bluebird.delay(3000);
   }
+  return {};
 }
 
 function getRealImageUri(uri: string): string {
@@ -284,7 +297,7 @@ async function GetPublicationById(
   dbOperator: DbOperator,
   pubId: string
 ): Promise<any> {
-  let tryout = 10;
+  let tryout = 300;
   while (--tryout >= 0) {
     const res = await dbOperator.getPublicationById(pubId);
     if (res !== null) {
