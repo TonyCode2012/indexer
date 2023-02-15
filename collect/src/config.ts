@@ -80,6 +80,7 @@ export const LENS_DATA_LIMIT = parseInt(getParamOrExit('LENS_DATA_LIMIT'));
 export const MAX_TASK = parseInt(getParamOrExit('MAX_TASK'));
 
 export const TIMEOUT = parseInt(getParam('TIMEOUT') || '300');
+export const HTTP_TIMEOUT = parseInt(getParam('HTTP_TIMEOUT') || '300');
 
 export const API_BASE_URI = getParamOrExit('API_BASE_URI');
 
@@ -96,8 +97,8 @@ export const ACHV_TMPL_COLL = 'achv_tmpl'
 export const BENEFIT_TMPL_COLL = 'benefit_tmpl'
 export const TASK_TMPL_COLL = 'task_tmpl'
 
-//export const POLYGON_ENDPOINT = "https://billowing-silent-friday.matic.discover.quiknode.pro/1d4fafb9f0722f3d64de51b10ab032bc0b1da6ee/";
-export const POLYGON_ENDPOINT = getParamOrExit('POLYGON_RPC_URL');
+export const POLYGON_ENDPOINT = "https://billowing-silent-friday.matic.discover.quiknode.pro/1d4fafb9f0722f3d64de51b10ab032bc0b1da6ee/";
+//export const POLYGON_ENDPOINT = getParamOrExit('POLYGON_RPC_URL');
 export const LENS_HUB_EVENT_ABI = [
   "event ProfileCreated(uint256 indexed profileId,address indexed creator,address indexed to,string handle,string imageURI,address followModule,bytes followModuleReturnData,string followNFTURI,uint256 timestamp)",
   "event DefaultProfileSet(address indexed wallet,uint256 indexed profileId,uint256 timestamp)",

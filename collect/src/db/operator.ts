@@ -114,6 +114,15 @@ export function createDBOperator(db: MongoDB): DbOperator {
     }
   }
 
+  const insertPublication = async (data: any):  Promise<void> => {
+    try {
+      return await db.dbHandler.collection(PUBLICATION_COLL).insertOne(data);
+    } catch (e: any) {
+      if (e.code !== 11000)
+        throw new Error(`Insert publications failed, message:${e}`);
+    }
+  }
+
   const insertPublications = async (data: any[]): Promise<void> => {
     try {
       if (data.length === 0) {
@@ -158,6 +167,24 @@ export function createDBOperator(db: MongoDB): DbOperator {
     //await db.dbHandler.collection(PROFILE_COLL).replaceOne(query, data, options);
   }
 
+  const updateProfiles = async (query: any, update: any): Promise<void> => {
+    await db.dbHandler.collection(PROFILE_COLL).updateMany(query, update);
+  }
+
+  const updateProfileEx = async (query: any, data: any, options: any = { upsert: true }): Promise<void> => {
+    await db.dbHandler.collection(PROFILE_COLL).updateOne(query, data, options);
+  }
+
+  const updatePublication = async (data: any): Promise<void> => {
+    const query = { _id: data._id };
+    const options = { upsert: true };
+    await db.dbHandler.collection(PUBLICATION_COLL).updateOne(query, { $set: data }, options);
+  }
+
+  const updatePublicationEx = async (query: any, data: any, options: any = { upsert: true }): Promise<void> => {
+    await db.dbHandler.collection(PUBLICATION_COLL).updateOne(query, data, options);
+  }
+
   const updateProfileTimestamp = async (id: string, timestamp: number): Promise<void> => {
     const query = { _id: id };
     const updateData = { lastUpdateTimestamp: timestamp };
@@ -173,12 +200,40 @@ export function createDBOperator(db: MongoDB): DbOperator {
     await db.dbHandler.collection(PROFILE_COLL).updateOne(query, { $set: updateData });
   }
 
+  const findOneAndUpdateProfile = async (filter: any, update: any, options: any): Promise<void> => {
+    await db.dbHandler.collection(PROFILE_COLL).findOneAndUpdate(filter, update, options);
+  }
+
   const getProfileCursor = async (): Promise<string> => {
     const cursor = await db.dbHandler.collection(CURSOR_COLL).findOne({_id: 'profile'})
     if (cursor === null)
       return '{}';
 
     return cursor.value;
+  }
+
+  const getDefaultProfileByAddress = async (address: string): Promise<any> => {
+    const cursor = await db.dbHandler.collection(PROFILE_COLL).findOne(
+      {
+        ownedBy: address,
+        isDefault: true,
+      },
+    );
+    if (cursor === null) {
+      const cursor2 = await db.dbHandler.collection(PROFILE_COLL)
+        .find({ownedBy: address})
+        .sort({ createdAt: 1 })
+        .limit(1).toArray();
+      if (cursor2.length === 0)
+        return null;
+      return cursor2[0];
+    }
+
+    return cursor;
+  }
+
+  const getPublicationById = async (id: string): Promise<any> => {
+    return await db.dbHandler.collection(PUBLICATION_COLL).findOne({_id: id})
   }
 
   const getPublicationCursor = async (id: string): Promise<string> => {
@@ -346,20 +401,28 @@ export function createDBOperator(db: MongoDB): DbOperator {
     insertWhitelists,
     insertProfile,
     insertProfiles,
+    insertPublication,
     insertPublications,
     deleteOne,
     deleteMany,
     deleteStop,
     updateProfile,
+    updateProfiles,
+    updateProfileEx,
+    updatePublication,
+    updatePublicationEx,
     updateProfileCursor,
     updateProfileTimestamp,
     updatePublicationCursor,
     updateProfileCursorAndTimestamp,
+    findOneAndUpdateProfile,
     setSyncedBlockNumber,
     setStartBlockNumber,
     setStop,
     setLastUpdateTimestamp,
     getStop,
+    getDefaultProfileByAddress,
+    getPublicationById,
     getProfileCursor,
     getPublicationCursor,
     getProfileIdsWithLimit,

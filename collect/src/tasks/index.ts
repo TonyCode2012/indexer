@@ -37,11 +37,11 @@ export async function createSimpleTasks(
 
   const logger = createChildLogger({ moduleId: 'simple-tasks' });
   let tasks = [
-    createProfileTask,
-    createPublicationTask,
-    createWhitelistTask,
-    createAchievementTask,
-    createTasksTask,
+    //createProfileTask,
+    //createPublicationTask,
+    //createWhitelistTask,
+    //createAchievementTask,
+    //createTasksTask,
     createMonitorTask,
   ];
   return Bluebird.mapSeries(tasks, (t) => {
