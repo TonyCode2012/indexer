@@ -29,6 +29,7 @@ import {
 } from '../config';
 import { Dayjs } from '../utils/datetime';
 
+let currentBlock = -1;
 
 export async function handleMonitor(
   context: AppContext,
@@ -52,16 +53,18 @@ export async function handleMonitor(
   let toBlock = fromBlock + 3000;
 
   try {
-    const currentBlock = await (async (startBlock: number) => {
-      let tryout = 10;
-      while (--tryout >= 0) {
-        const endBlock = await provider.getBlockNumber();
-        if (endBlock >= startBlock) {
-          return endBlock;
+    if (currentBlock === -1 || toBlock > currentBlock) {
+      currentBlock = await (async (startBlock: number) => {
+        let tryout = 10;
+        while (--tryout >= 0) {
+          const endBlock = await provider.getBlockNumber();
+          if (endBlock >= startBlock) {
+            return endBlock;
+          }
         }
-      }
-      return startBlock;
-    })(fromBlock);
+        return startBlock;
+      })(fromBlock);
+    }
     if (toBlock > currentBlock) {
       toBlock = currentBlock;
     }
@@ -84,23 +87,20 @@ export async function handleMonitor(
       toBlock: toBlock,
     }
 
-    let profileIds: string[] = [];
-    let pubIds: string[] = [];
+    let events: any[] = [];
     // Get lens hub logs
     const lensHubLogs = await provider.getLogs(lensHubFilter);
     for (const log of lensHubLogs) {
-      const event = lensHubIface.parseLog(log);
-      eventHub(context, event, isStopped);
+      events.push(lensHubIface.parseLog(log));
     }
     // Get lens periphery logs
     const lensPeripheryLogs = await provider.getLogs(lensPeripheryFilter);
     for (const log of lensPeripheryLogs) {
-      const event = lensPeripheryIface.parseLog(log);
-      eventHub(context, event, isStopped);
+      events.push(lensPeripheryIface.parseLog(log));
     }
+    await eventHub(context, events, isStopped);
     if (isStopped()) 
       throw new Error("Stop record break point due to stopped.");
-    process.exit(-1);
     await dbOperator.setSyncedBlockNumber(toBlock);
   } catch (e: any) {
     logger.error(`Get logs from polychain failed,error:${e}.`);
@@ -109,31 +109,37 @@ export async function handleMonitor(
 
 async function eventHub(
   context: AppContext,
-  event: any,
+  events: any[],
   isStopped: IsStopped
 ): Promise<void> {
+  const logger = context.logger;
   //console.log(Dayjs(event.args.timestamp.toNumber()*1000).toISOString());
   const dbOperator = createDBOperator(context.database);
   const profileCreatedArry = [];
   const profileUpdateMap = new Map<string,Array<any>>();
   const pubCreatedArry = [];
   const othersArry = [];
-  const eventName = event.name;
-  if (eventName === "ProfileCreated") {
-    profileCreatedArry.push(event);
-  } else if (profileUpdateSet.has(eventName)) {
-    const profileId = event.args.profileId._hex;
-    let eventArry = profileUpdateMap.get(profileId);
-    if (eventArry === null || eventArry === undefined) {
-      eventArry = new Array<any>();
-      profileUpdateMap.set(profileId, eventArry);
+  for (const event of events) {
+    const eventName = event.name;
+    if (eventName === "ProfileCreated") {
+      profileCreatedArry.push(event);
+    } else if (profileUpdateSet.has(eventName)) {
+      const profileId = event.args.profileId._hex;
+      let eventArry = profileUpdateMap.get(profileId);
+      if (eventArry === null || eventArry === undefined) {
+        eventArry = new Array<any>();
+        profileUpdateMap.set(profileId, eventArry);
+      }
+      eventArry.push(event);
+    } else if (pubCreatedSet.has(eventName)) {
+      pubCreatedArry.push(event);
+    } else {
+      othersArry.push(event);
     }
-    eventArry.push(event);
-  } else if (pubCreatedSet.has(eventName)) {
-    pubCreatedArry.push(event);
-  } else {
-    othersArry.push(event);
   }
+
+  logger.info(`created profile num:${profileCreatedArry.length}, 
+    created publication num:${pubCreatedArry.length}`);
 
   // Process 'ProfileCreated' event
   await Bluebird.map(profileCreatedArry, async (event: any) => {
