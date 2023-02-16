@@ -10,26 +10,29 @@ import { SimpleTask } from '../types/tasks.d';
 import { IsStopped } from './task-utils';
 import { getTimestamp } from '../utils';
 import { getPublication } from './publication-task';
+import { Alchemy, Network } from 'alchemy-sdk';
 import {
   profileUpdateSet,
   pubCreatedSet,
   eventOperator,
-  EventFunc,
 } from '../types/event';
 import {
-  LENS_DATA_LIMIT,
   LENS_HUB_CONTRACT,
   LENS_PERIPHERY_CONTRACT,
-  LENS_HUB_EVENT_ABI,
-  LENS_PERIPHERY_EVENT_ABI,
-  LENS_HUB_TOPICS,
-  LENS_PERIPHERY_TOPICS,
-  POLYGON_ENDPOINT,
   MAX_TASK,
+  ALCHEMY_API_KEY,
+  LENS_TOPICS,
+  LENS_EVENT_ABI,
+  HTTP_TIMEOUT,
 } from '../config';
-import { Dayjs } from '../utils/datetime';
 
 let currentBlock = -1;
+const axios = require('axios');
+const axiosInstance = axios.create({
+  baseUrl: "https://polygon-mainnet.g.alchemy.com/v2/",
+  timeout: HTTP_TIMEOUT,
+  headers: { "accept": "application/json", "content-type": "application/json" },
+});
 
 export async function handleMonitor(
   context: AppContext,
@@ -47,19 +50,37 @@ export async function handleMonitor(
     }
   }
 
-  const provider = new ethers.providers.JsonRpcProvider(POLYGON_ENDPOINT);
-  const lensHubIface = new ethers.utils.Interface(LENS_HUB_EVENT_ABI);
-  const lensPeripheryIface = new ethers.utils.Interface(LENS_PERIPHERY_EVENT_ABI);
-  let toBlock = fromBlock + 3000;
+  // Optional config object, but defaults to the API key 'demo' and Network 'eth-mainnet'.
+  // const settings = {
+  //   apiKey: ALCHEMY_API_KEY, // Replace with your Alchemy API key.
+  //   network: Network.MATIC_MAINNET, // Replace with your network.
+  //   batchRequests: true,
+  //   url: "https://polygon-mainnet.g.alchemy.com/v2/byjAB841iQ7fkRSAhnVvfkPBp40ARv9z",
+  // };
+  // const alchemy = new Alchemy(settings);
+  // console.log(alchemy)
+  const lensIface = new ethers.utils.Interface(LENS_EVENT_ABI);
+  let toBlock = fromBlock + 2000;
 
   try {
     if (currentBlock === -1 || toBlock > currentBlock) {
       currentBlock = await (async (startBlock: number) => {
         let tryout = 10;
         while (--tryout >= 0) {
-          const endBlock = await provider.getBlockNumber();
-          if (endBlock >= startBlock) {
-            return endBlock;
+          try {
+            const res = await axios.post(
+              "https://polygon-mainnet.g.alchemy.com/v2/byjAB841iQ7fkRSAhnVvfkPBp40ARv9z",
+              {
+                id: 1,
+                jsonrpc: "2.0",
+                method: "eth_blockNumber",
+                params: []
+              }
+            );
+            const endBlock = parseInt(res.data.result, 16);
+            return endBlock >= startBlock ? endBlock : startBlock;
+          } catch (e: any) {
+            logger.warn(`Get block number error:${e}`);
           }
         }
         return startBlock;
@@ -70,33 +91,32 @@ export async function handleMonitor(
     }
     logger.info(`from:${fromBlock}, to:${toBlock}`)
 
-    const lensHubFilter = {
-      address: LENS_HUB_CONTRACT,
+    const lensFilter = {
+      address: [LENS_HUB_CONTRACT, LENS_PERIPHERY_CONTRACT],
       topics: [
-        LENS_HUB_TOPICS
+        LENS_TOPICS
       ],
-      fromBlock: fromBlock,
-      toBlock: toBlock,
-    }
-    const lensPeripheryFilter = {
-      address: LENS_PERIPHERY_CONTRACT,
-      topics: [
-        LENS_PERIPHERY_TOPICS
-      ],
-      fromBlock: fromBlock,
-      toBlock: toBlock,
+      fromBlock: "0x".concat(fromBlock.toString(16)),
+      toBlock: "0x".concat(toBlock.toString(16)),
     }
 
     let events: any[] = [];
     // Get lens hub logs
-    const lensHubLogs = await provider.getLogs(lensHubFilter);
-    for (const log of lensHubLogs) {
-      events.push(lensHubIface.parseLog(log));
-    }
-    // Get lens periphery logs
-    const lensPeripheryLogs = await provider.getLogs(lensPeripheryFilter);
-    for (const log of lensPeripheryLogs) {
-      events.push(lensPeripheryIface.parseLog(log));
+    const lensLogs = await axios.post(
+      "https://polygon-mainnet.g.alchemy.com/v2/byjAB841iQ7fkRSAhnVvfkPBp40ARv9z",
+      {
+        id: 1,
+        jsonrpc: "2.0",
+        method: "eth_getLogs",
+        params: [lensFilter]
+      },
+      {
+        "content-type": "application/json",
+      }
+    );
+    for (const log of lensLogs.data.result) {
+      // const event = lensIface.parseLog(log);
+      events.push(lensIface.parseLog(log));
     }
     await eventHub(context, events, isStopped);
     if (isStopped()) 
@@ -138,10 +158,10 @@ async function eventHub(
     }
   }
 
-  logger.info(`created profile num:${profileCreatedArry.length}, 
-    created publication num:${pubCreatedArry.length}`);
+  logger.info(`created profile num:${profileCreatedArry.length}, created publication num:${pubCreatedArry.length}`);
 
   // Process 'ProfileCreated' event
+  logger.info("Processing profile create...");
   await Bluebird.map(profileCreatedArry, async (event: any) => {
     const eventFunc = eventOperator.get(event.name);
     if (!isStopped() && eventFunc !== null && eventFunc !== undefined) {
@@ -150,6 +170,7 @@ async function eventHub(
   }, { concurrency : MAX_TASK })
 
   // Process profile update related event
+  logger.info("Processing profile update...");
   await Bluebird.map(profileUpdateMap.values(), async (events: any) => {
     for (let i = 0; i < events.length; i++) {
       const event = events[i];
@@ -164,6 +185,7 @@ async function eventHub(
   }, { concurrency : MAX_TASK })
 
   // Process publication created related event
+  logger.info("Processing publication create...");
   await Bluebird.map(pubCreatedArry, async (event: any) => {
     const eventFunc = eventOperator.get(event.name);
     if (!isStopped() && eventFunc !== null && eventFunc !== undefined) {
@@ -172,6 +194,7 @@ async function eventHub(
   }, { concurrency : MAX_TASK })
 
   // Process other event
+  logger.info("Processing others...");
   await Bluebird.map(othersArry, async (event: any) => {
     const eventFunc = eventOperator.get(event.name);
     if (!isStopped() && eventFunc !== null && eventFunc !== undefined) {

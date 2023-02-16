@@ -41,7 +41,7 @@ export async function profileMetadataSet(
       _id: event.args.profileId._hex,
       name: metadata.name,
       bio: metadata.bio,
-      cover_picture: metadata.cover_picture,
+      cover_picture: getRealImageUri(metadata.cover_picture),
       attributes: metadata.attributes,
       appId: metadata.appId,
     });
@@ -103,7 +103,7 @@ export async function followNFTURISet(
 ): Promise<void> {
   await dbOperator.updateProfile({
     _id: event.args.profileId._hex,
-    followNftUri: event.args.followNFTURI,
+    followNftUri: getRealImageUri(event.args.followNFTURI),
   });
 }
 
@@ -126,7 +126,7 @@ export async function postCreated(
     _id: event.args.profileId._hex + "-" + event.args.pubId._hex,
     __typename: 'Post',
     profileId: event.args.profileId._hex,
-    appId: content !== null ? content.appId : null,
+    appId: content ? content.appId : null,
     contentUri: event.args.contentURI,
     //stats: {
     //  //totalMirrors: 0,
@@ -151,7 +151,7 @@ export async function commentCreated(
     _id: event.args.profileId._hex + "-" + event.args.pubId._hex,
     __typename: 'Comment',
     profileId: event.args.profileId._hex,
-    appId: commentedPub !== null ? commentedPub.appId : null,
+    appId: commentedPub ? commentedPub.appId : null,
     contentUri: event.args.contentURI,
     //stats: {
     //  //totalMirrors: 0,
@@ -180,14 +180,13 @@ export async function mirrorCreated(
   let data = {
     _id: event.args.profileId._hex + "-" + event.args.pubId._hex,
     __typename: 'Mirror',
-    appId: mirroredPub.appId,
+    appId: mirroredPub ? mirroredPub.appId : null,
     profileId: event.args.profileId._hex,
     //stats: {
     //  //totalMirrors: 0,
     //  //totalComments: 0,
     //  totalCollects: 0,
     //},
-    mirrorOf: { __typename: mirroredPub.__typename, id: mirroredPub._id },
     referenceModule: event.args.referenceModule,
     createdAt: Dayjs(event.args.timestamp.toNumber()*1000).toISOString(),
   };
@@ -272,18 +271,26 @@ export async function followNFTTransferred(
 }
 
 async function processContentUri(uri: string): Promise<any> {
-  const lensInfraUrl = "https://lens.infura-ipfs.io/ipfs/";
-  const ipfsUriHead = "ipfs://";
   let realUri = uri;
+  const lensInfraUrl = "https://lens.infura-ipfs.io/ipfs/";
+  const invalidUrls = [
+    "ipfs://",
+    "https://ipfs.infura.io/ipfs/",
+  ];
+  // Filter invalid uris
+  for (const iv of invalidUrls) {
+    if (uri.startsWith(iv)) {
+      realUri = lensInfraUrl + uri.substring(iv.length, uri.length);
+      break;
+    }
+  }
+  if (!realUri.startsWith("http")) {
+    logger.error(`Invalid uri:${realUri}`);
+    return null;
+  }
   let tryout = 30;
   while (--tryout >= 0) {
     try {
-      if (realUri.startsWith(ipfsUriHead)) {
-        realUri = lensInfraUrl + realUri.substring(ipfsUriHead.length, realUri.length);
-      } else if (!realUri.startsWith("http")) {
-        logger.error(`Invalid uri:${realUri}`);
-        return null;
-      }
       const res = await axiosInstance.get(realUri, {
         timeout: HTTP_TIMEOUT,
       });
@@ -301,20 +308,39 @@ async function processContentUri(uri: string): Promise<any> {
   return null;
 }
 
-function getRealImageUri(uri: string): string {
-  const lensInfraUrl = "https://lens.infura-ipfs.io/ipfs/";
-  const ipfsUriHead = "ipfs://";
-  if (uri.startsWith(ipfsUriHead)) {
-    return lensInfraUrl + uri.substring(ipfsUriHead.length, uri.length);
+function getRealImageUri(uri: any): string {
+  if (uri === null) {
+    return "";
   }
-  return uri;
+  let realUri = uri;
+  if (typeof uri === 'object') {
+    if (uri.original) {
+      realUri = uri.original.url;
+    } else if (uri.uri) {
+      realUri = uri.uri;
+    } else {
+      logger.error(`Unkonw image uri type:${uri}`);
+      return "";
+    }
+  }
+  const lensInfraUrl = "https://lens.infura-ipfs.io/ipfs/";
+  const invalidUrls = [
+    "ipfs://",
+    "https://ipfs.infura.io/ipfs/",
+  ];
+  for (const iv of invalidUrls) {
+    if (realUri.startsWith(iv)) {
+      return lensInfraUrl + realUri.substring(iv.length, realUri.length);
+    }
+  }
+  return realUri;
 }
 
 async function GetPublicationById(
   dbOperator: DbOperator,
   pubId: string
 ): Promise<any> {
-  let tryout = 300;
+  let tryout = 30;
   while (--tryout >= 0) {
     const res = await dbOperator.getPublicationById(pubId);
     if (res !== null) {
