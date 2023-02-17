@@ -3,7 +3,9 @@ import { apolloClient } from '../apollo-client';
 import { 
   PublicationsQueryRequest,
   PublicationsDocument,
-  PublicationTypes } from '../graphql/generated';
+  PublicationTypes, 
+  PublicationQueryRequest,
+  PublicationDocument} from '../graphql/generated';
 import { logger } from '../utils/logger';
 import os from 'os';
 
@@ -21,6 +23,23 @@ export async function queryPublications(request: PublicationsQueryRequest) {
     throw ({
       statusCode: 404,
       message: `Get publications with request:${request} failed!`,
+    });
+
+  return data;
+};
+
+export async function queryPublication(request: PublicationQueryRequest) {
+  const res = await apolloClient.query({
+    query: PublicationDocument,
+    variables: {
+      request,
+    },
+  });
+  const data = res.data;
+  if (data === null || data === undefined)
+    throw ({
+      statusCode: 404,
+      message: `Get publication with request:${request} failed!`,
     });
 
   return data;

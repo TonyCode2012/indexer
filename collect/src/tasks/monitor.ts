@@ -9,7 +9,6 @@ import { Logger } from 'winston';
 import { SimpleTask } from '../types/tasks.d';
 import { IsStopped } from './task-utils';
 import { getTimestamp } from '../utils';
-import { getPublication } from './publication-task';
 import { Alchemy, Network } from 'alchemy-sdk';
 import {
   profileUpdateSet,
@@ -63,9 +62,10 @@ export async function handleMonitor(
   const lensIface = new ethers.utils.Interface(LENS_EVENT_ABI);
   const _fromBlock = fromBlock;
 
+  let events: any[] = [];
+  let toBlock = 0;
+  logger.info(`Getting blocks from:${fromBlock}...`);
   try {
-    let toBlock = 0;
-    let events: any[] = [];
     let acc = 5;
     while (--acc >= 0) {
       toBlock = fromBlock + 2000;
@@ -81,7 +81,6 @@ export async function handleMonitor(
       if (toBlock === fromBlock) {
         break;
       }
-
       const lensFilter = {
         address: [LENS_HUB_CONTRACT, LENS_PERIPHERY_CONTRACT],
         topics: [
@@ -108,13 +107,17 @@ export async function handleMonitor(
       }
       fromBlock = toBlock;
     }
-    logger.info(`from:${_fromBlock}, to:${toBlock}`)
-    await eventHub(context, events, isStopped);
-    if (isStopped()) 
-      throw new Error("Stop record break point due to stopped.");
-    await dbOperator.setSyncedBlockNumber(toBlock);
+    logger.info(`from:${_fromBlock}, to:${toBlock}`);
+    try {
+      await eventHub(context, events, isStopped);
+      if (isStopped()) 
+        throw new Error("Stop record break point due to stopped.");
+      await dbOperator.setSyncedBlockNumber(toBlock);
+    } catch (e: any) {
+      logger.error(`Process lens logs failed, ${e}`);
+    }
   } catch (e: any) {
-    logger.error(`Get logs from polychain failed,error:${e}.`);
+    logger.error(`Get logs from polychain(block range:${fromBlock}~${toBlock}) failed,error:${e}.`);
   }
 }
 
@@ -217,7 +220,7 @@ export async function createMonitorTask(
   context: AppContext,
   loggerParent: Logger,
 ): Promise<SimpleTask> {
-  const interval = 5 * 1000;
+  const interval = 1 * 1000;
   return makeIntervalTask(
     0,
     interval,

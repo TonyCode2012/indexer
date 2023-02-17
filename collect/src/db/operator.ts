@@ -114,13 +114,14 @@ export function createDBOperator(db: MongoDB): DbOperator {
     }
   }
 
-  const insertPublication = async (data: any):  Promise<void> => {
+  const insertPublication = async (data: any):  Promise<any> => {
     try {
       return await db.dbHandler.collection(PUBLICATION_COLL).insertOne(data);
     } catch (e: any) {
       if (e.code !== 11000)
         throw new Error(`Insert publications failed, message:${e}`);
     }
+    return null;
   }
 
   const insertPublications = async (data: any[]): Promise<void> => {

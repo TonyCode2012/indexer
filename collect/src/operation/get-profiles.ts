@@ -6,6 +6,8 @@ import {
   ProfileSortCriteria,
   ProfileQueryRequest,
   ProfilesDocument,
+  SingleProfileQueryRequest,
+  ProfileDocument,
 } from '../graphql/generated';
 import { loadDB, closeAllDB } from '../db';
 import { logger } from '../utils/logger';
@@ -36,6 +38,23 @@ export async function getProfiles(request: ProfileQueryRequest) {
     },
   });
   const data = res.data.profiles;
+  if (data === null || data === undefined)
+    throw ({
+      statusCode: 404,
+      message: 'Get profiles failed!',
+    });
+
+  return data;
+}
+
+export async function getProfile(request: SingleProfileQueryRequest) {
+  const res = await apolloClient.query({
+    query: ProfileDocument,
+    variables: {
+      request,
+    },
+  });
+  const data = res.data;
   if (data === null || data === undefined)
     throw ({
       statusCode: 404,
