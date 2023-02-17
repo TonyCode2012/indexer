@@ -27,9 +27,12 @@ export const eventOperator = new Map<string,EventFunc>(Object.entries({
   ProfileImageURISet: ep.profileImageURISet,
   FollowNFTURISet: ep.followNFTURISet,
   FollowModuleSet: ep.followModuleSet,
+  ProfileMetadataSet: ep.profileMetadataSet,
+
   PostCreated: ep.postCreated,
   CommentCreated: ep.commentCreated,
   MirrorCreated: ep.mirrorCreated,
+
   //FollowNFTDeployed: ep.followNFTDeployed,
   //CollectNFTDeployed: ep.collectNFTDeployed,
   Collected: ep.collected,
@@ -40,5 +43,4 @@ export const eventOperator = new Map<string,EventFunc>(Object.entries({
   //CollectNFTInitialized: ep.collectNFTInitialized,
   //FollowsApproved: ep.followsApproved,
   //FollowsToggled: ep.followsToggled,
-  ProfileMetadataSet: ep.profileMetadataSet,
 }))

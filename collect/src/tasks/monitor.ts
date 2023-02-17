@@ -21,6 +21,7 @@ import {
   LENS_PERIPHERY_CONTRACT,
   MAX_TASK,
   ALCHEMY_API_KEY,
+  ALCHEMY_MATIC_ENDPOINT,
   LENS_TOPICS,
   LENS_EVENT_ABI,
   HTTP_TIMEOUT,
@@ -60,64 +61,54 @@ export async function handleMonitor(
   // const alchemy = new Alchemy(settings);
   // console.log(alchemy)
   const lensIface = new ethers.utils.Interface(LENS_EVENT_ABI);
-  let toBlock = fromBlock + 2000;
+  const _fromBlock = fromBlock;
 
   try {
-    if (currentBlock === -1 || toBlock > currentBlock) {
-      currentBlock = await (async (startBlock: number) => {
-        let tryout = 10;
-        while (--tryout >= 0) {
-          try {
-            const res = await axios.post(
-              "https://polygon-mainnet.g.alchemy.com/v2/byjAB841iQ7fkRSAhnVvfkPBp40ARv9z",
-              {
-                id: 1,
-                jsonrpc: "2.0",
-                method: "eth_blockNumber",
-                params: []
-              }
-            );
-            const endBlock = parseInt(res.data.result, 16);
-            return endBlock >= startBlock ? endBlock : startBlock;
-          } catch (e: any) {
-            logger.warn(`Get block number error:${e}`);
-          }
-        }
-        return startBlock;
-      })(fromBlock);
-    }
-    if (toBlock > currentBlock) {
-      toBlock = currentBlock;
-    }
-    logger.info(`from:${fromBlock}, to:${toBlock}`)
-
-    const lensFilter = {
-      address: [LENS_HUB_CONTRACT, LENS_PERIPHERY_CONTRACT],
-      topics: [
-        LENS_TOPICS
-      ],
-      fromBlock: "0x".concat(fromBlock.toString(16)),
-      toBlock: "0x".concat(toBlock.toString(16)),
-    }
-
+    let toBlock = 0;
     let events: any[] = [];
-    // Get lens hub logs
-    const lensLogs = await axios.post(
-      "https://polygon-mainnet.g.alchemy.com/v2/byjAB841iQ7fkRSAhnVvfkPBp40ARv9z",
-      {
-        id: 1,
-        jsonrpc: "2.0",
-        method: "eth_getLogs",
-        params: [lensFilter]
-      },
-      {
-        "content-type": "application/json",
+    let acc = 5;
+    while (--acc >= 0) {
+      toBlock = fromBlock + 2000;
+      if (currentBlock === -1 || toBlock > currentBlock) {
+        currentBlock = await getCurrentBlock(context);
+        if (currentBlock === -1) {
+          currentBlock = fromBlock;
+        }
       }
-    );
-    for (const log of lensLogs.data.result) {
-      // const event = lensIface.parseLog(log);
-      events.push(lensIface.parseLog(log));
+      if (toBlock > currentBlock) {
+        toBlock = currentBlock;
+      }
+      if (toBlock === fromBlock) {
+        break;
+      }
+
+      const lensFilter = {
+        address: [LENS_HUB_CONTRACT, LENS_PERIPHERY_CONTRACT],
+        topics: [
+          LENS_TOPICS
+        ],
+        fromBlock: "0x".concat(fromBlock.toString(16)),
+        toBlock: "0x".concat(toBlock.toString(16)),
+      }
+      // Get lens logs
+      const lensLogs = await axios.post(
+        ALCHEMY_MATIC_ENDPOINT + "/" + ALCHEMY_API_KEY,
+        {
+          id: 1,
+          jsonrpc: "2.0",
+          method: "eth_getLogs",
+          params: [lensFilter]
+        },
+        {
+          "content-type": "application/json",
+        }
+      );
+      for (const log of lensLogs.data.result) {
+        events.push(lensIface.parseLog(log));
+      }
+      fromBlock = toBlock;
     }
+    logger.info(`from:${_fromBlock}, to:${toBlock}`)
     await eventHub(context, events, isStopped);
     if (isStopped()) 
       throw new Error("Stop record break point due to stopped.");
@@ -127,16 +118,37 @@ export async function handleMonitor(
   }
 }
 
+async function getCurrentBlock(context: AppContext): Promise<number> {
+  const logger = context.logger;
+  let tryout = 10;
+  while (--tryout >= 0) {
+    try {
+      const res = await axios.post(
+        ALCHEMY_MATIC_ENDPOINT + "/" + ALCHEMY_API_KEY,
+        {
+          id: 1,
+          jsonrpc: "2.0",
+          method: "eth_blockNumber",
+          params: []
+        }
+      );
+      return parseInt(res.data.result, 16);
+    } catch (e: any) {
+      logger.warn(`Get block number error:${e}`);
+    }
+  }
+  return -1;
+}
+
 async function eventHub(
   context: AppContext,
   events: any[],
   isStopped: IsStopped
 ): Promise<void> {
   const logger = context.logger;
-  //console.log(Dayjs(event.args.timestamp.toNumber()*1000).toISOString());
   const dbOperator = createDBOperator(context.database);
   const profileCreatedArry = [];
-  const profileUpdateMap = new Map<string,Array<any>>();
+  const profileUpdateMap = new Map<string,Map<string,any>>();
   const pubCreatedArry = [];
   const othersArry = [];
   for (const event of events) {
@@ -145,12 +157,12 @@ async function eventHub(
       profileCreatedArry.push(event);
     } else if (profileUpdateSet.has(eventName)) {
       const profileId = event.args.profileId._hex;
-      let eventArry = profileUpdateMap.get(profileId);
-      if (eventArry === null || eventArry === undefined) {
-        eventArry = new Array<any>();
-        profileUpdateMap.set(profileId, eventArry);
+      let eventMap = profileUpdateMap.get(profileId);
+      if (eventMap === null || eventMap === undefined) {
+        eventMap = new Map<string,any>();
+        profileUpdateMap.set(profileId, eventMap);
       }
-      eventArry.push(event);
+      eventMap.set(eventName, event);
     } else if (pubCreatedSet.has(eventName)) {
       pubCreatedArry.push(event);
     } else {
@@ -171,16 +183,14 @@ async function eventHub(
 
   // Process profile update related event
   logger.info("Processing profile update...");
-  await Bluebird.map(profileUpdateMap.values(), async (events: any) => {
-    for (let i = 0; i < events.length; i++) {
-      const event = events[i];
-      const eventFunc = eventOperator.get(event.name);
-      if (eventFunc !== null && eventFunc !== undefined) {
-        await eventFunc(dbOperator, event)
-      }
-      if (isStopped()) {
-        return;
-      }
+  const profileUpdateArry: any[] = [];
+  for (const m of profileUpdateMap.values()) {
+    profileUpdateArry.push(...Array.from(m.values()));
+  }
+  await Bluebird.map(profileUpdateArry, async (event: any) => {
+    const eventFunc = eventOperator.get(event.name);
+    if (!isStopped() && eventFunc !== null && eventFunc !== undefined) {
+      await eventFunc(dbOperator, event)
     }
   }, { concurrency : MAX_TASK })
 

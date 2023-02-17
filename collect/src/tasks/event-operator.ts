@@ -1,4 +1,5 @@
 import Bluebird from 'bluebird';
+import { CID } from 'multiformats/cid';
 import { DbOperator } from '../types/database.d';
 import { logger } from '../utils/logger';
 import { Dayjs } from '../utils/datetime';
@@ -224,7 +225,7 @@ export async function followed(
   );
   const defaultProfile = await dbOperator.getDefaultProfileByAddress(event.args.follower);
   if (defaultProfile === null) {
-    logger.error(`Set address:${event.args.follower} following failed, cannot find default profile.`);
+    //logger.error(`Set address:${event.args.follower} following failed, cannot find default profile.`);
     return;
   }
   await dbOperator.updateProfileEx(
@@ -271,6 +272,9 @@ export async function followNFTTransferred(
 }
 
 async function processContentUri(uri: string): Promise<any> {
+  if (uri === null) {
+    return null;
+  }
   let realUri = uri;
   const lensInfraUrl = "https://lens.infura-ipfs.io/ipfs/";
   const invalidUrls = [
@@ -284,14 +288,15 @@ async function processContentUri(uri: string): Promise<any> {
       break;
     }
   }
+  console.log(`===== content uri:${realUri}`)
   if (!realUri.startsWith("http")) {
     logger.error(`Invalid uri:${realUri}`);
     return null;
   }
-  let tryout = 30;
+  let tryout = 10;
   while (--tryout >= 0) {
     try {
-      const res = await axiosInstance.get(realUri, {
+      const res = await axios.get(realUri, {
         timeout: HTTP_TIMEOUT,
       });
       return res.data;
@@ -299,10 +304,14 @@ async function processContentUri(uri: string): Promise<any> {
       if (realUri.startsWith(lensInfraUrl)) {
         logger.warn(`process uri:${realUri} failed, info:${e}, retry again.`);
       } else {
-        realUri = lensInfraUrl + realUri.substring(realUri.lastIndexOf("/") + 1, realUri.length);
+        try {
+          const cid = realUri.substring(realUri.lastIndexOf("/") + 1, realUri.length);
+          const tmp = CID.parse(cid)
+          realUri = lensInfraUrl + "/" + cid;
+        } catch (e: any) {}
       }
     }
-    await Bluebird.delay(3000);
+    await Bluebird.delay(2000);
   }
   logger.error(`get data from uri:${realUri} failed.`);
   return null;
@@ -328,10 +337,17 @@ function getRealImageUri(uri: any): string {
     "ipfs://",
     "https://ipfs.infura.io/ipfs/",
   ];
+  try {
   for (const iv of invalidUrls) {
     if (realUri.startsWith(iv)) {
       return lensInfraUrl + realUri.substring(iv.length, realUri.length);
     }
+  }
+  } catch (e: any) {
+    console.log(e);
+    console.log(typeof uri);
+    console.log(realUri)
+    throw new Error('bad uri')
   }
   return realUri;
 }
@@ -340,7 +356,7 @@ async function GetPublicationById(
   dbOperator: DbOperator,
   pubId: string
 ): Promise<any> {
-  let tryout = 30;
+  let tryout = 10;
   while (--tryout >= 0) {
     const res = await dbOperator.getPublicationById(pubId);
     if (res !== null) {

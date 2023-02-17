@@ -101,6 +101,7 @@ export const TASK_TMPL_COLL = 'task_tmpl'
 // export const POLYGON_ENDPOINT = getParamOrExit('POLYGON_RPC_URL');
 export const POLYGON_ENDPOINT = "https://polygon-mainnet.g.alchemy.com/v2/byjAB841iQ7fkRSAhnVvfkPBp40ARv9z";
 export const ALCHEMY_API_KEY = getParamOrExit('ALCHEMY_API_KEY');
+export const ALCHEMY_MATIC_ENDPOINT = getParamOrExit('ALCHEMY_MATIC_ENDPOINT');
 export const LENS_HUB_EVENT_ABI = [
   "event ProfileCreated(uint256 indexed profileId,address indexed creator,address indexed to,string handle,string imageURI,address followModule,bytes followModuleReturnData,string followNFTURI,uint256 timestamp)",
   "event DefaultProfileSet(address indexed wallet,uint256 indexed profileId,uint256 timestamp)",
