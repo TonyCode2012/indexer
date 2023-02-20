@@ -172,8 +172,15 @@ async function eventHub(
       othersArry.push(event);
     }
   }
+  const profileUpdateArry: any[] = [];
+  for (const m of profileUpdateMap.values()) {
+    profileUpdateArry.push(...Array.from(m.values()));
+  }
 
-  logger.info(`created profile num:${profileCreatedArry.length}, created publication num:${pubCreatedArry.length}`);
+  logger.info(`created profile num:${profileCreatedArry.length}`);
+  logger.info(`update profile num:${profileUpdateArry.length}`);
+  logger.info(`created publication num:${pubCreatedArry.length}`);
+  logger.info(`others num:${othersArry.length}`);
 
   // Process 'ProfileCreated' event
   logger.info("Processing profile create...");
@@ -186,10 +193,6 @@ async function eventHub(
 
   // Process profile update related event
   logger.info("Processing profile update...");
-  const profileUpdateArry: any[] = [];
-  for (const m of profileUpdateMap.values()) {
-    profileUpdateArry.push(...Array.from(m.values()));
-  }
   await Bluebird.map(profileUpdateArry, async (event: any) => {
     const eventFunc = eventOperator.get(event.name);
     if (!isStopped() && eventFunc !== null && eventFunc !== undefined) {
@@ -229,5 +232,5 @@ export async function createMonitorTask(
     loggerParent,
     handleMonitor,
     '👀',
-  )
+  );
 }

@@ -182,6 +182,74 @@ export function createDBOperator(db: MongoDB): DbOperator {
     await db.dbHandler.collection(PUBLICATION_COLL).updateOne(query, { $set: data }, options);
   }
 
+  const updateUncompletePubs = async (): Promise<void> => {
+    const uncompleteItems = await db.dbHandler.collection(PUBLICATION_COLL).aggregate([
+      {
+        $match: {
+          $or: [
+            {
+              $and: [
+                { __typename: 'Comment' },
+                { "commentOn.__typename": { $exists: false} }
+              ]
+            },
+            {
+              $and: [
+                { __typename: 'Mirror' },
+                { "mirrorOf.__typename": { $exists: false} }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          __typename: 1,
+          assId: {
+            $cond: {
+              if: { $eq: [ "Comment", "$__typename" ] },
+              then: "$commentOn.id",
+              else: "$mirrorOf.id"
+            }
+          }
+        }
+      }
+    ]).limit(2000).toArray();
+
+    for (const item of uncompleteItems) {
+      const assItem = await db.dbHandler.collection(PUBLICATION_COLL).findOne(
+        { _id: item.assId  },
+        { __typename: 1, appId: 1 }
+      );
+      if (assItem === null) {
+        //logger.warn(`Enrich publication:${item._id} failed, get associated publication:${item.assId} failed.`);
+        continue;
+      }
+      if (item.__typename === "Comment") {
+        await db.dbHandler.collection(PUBLICATION_COLL).updateOne(
+          { _id: item._id },
+          {
+            $set: {
+              appId: assItem.appId,
+              "commentOn.__typename": assItem.__typename
+            }
+          }
+        );
+      } else {
+        await db.dbHandler.collection(PUBLICATION_COLL).updateOne(
+          { _id: item._id },
+          {
+            $set: {
+              appId: assItem.appId,
+              "mirrorOf.__typename": assItem.__typename
+            }
+          }
+        );
+      }
+    }
+  }
+
   const updatePublicationEx = async (query: any, data: any, options?: any): Promise<void> => {
     await db.dbHandler.collection(PUBLICATION_COLL).updateOne(query, data, options);
   }
@@ -413,6 +481,7 @@ export function createDBOperator(db: MongoDB): DbOperator {
     updatePublication,
     updatePublicationEx,
     updateProfileCursor,
+    updateUncompletePubs,
     updateProfileTimestamp,
     updatePublicationCursor,
     updateProfileCursorAndTimestamp,

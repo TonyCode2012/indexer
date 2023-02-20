@@ -19,6 +19,7 @@ export interface DbOperator {
   updatePublication: (data: any) => Promise<void>;
   updatePublicationEx: (query: any, data: any, options?: any) => Promise<void>;
   updateProfileCursor: (cursor: any, status?: string) => Promise<void>;
+  updateUncompletePubs: () => Promise<void>;
   updateProfileTimestamp: (id: string, timestamp: number) => Promise<void>;
   updatePublicationCursor: (id: string, cursor: string) => Promise<void>;
   updateProfileCursorAndTimestamp: (id: string, cursor: string, timestamp: number) => Promise<void>;

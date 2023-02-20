@@ -9,6 +9,7 @@ import { createWhitelistTask } from './whitelist-task';
 import { createMonitorTask } from './monitor';
 import { createAchievementTask } from './check-achievements';
 import { createTasksTask } from './check-tasks';
+import { createEnrichPubTask } from './enrichPub-task';
 import { createChildLoggerWith } from '../utils/logger';
 import {
   Apps,
@@ -42,6 +43,7 @@ export async function createSimpleTasks(
     //createWhitelistTask,
     //createAchievementTask,
     //createTasksTask,
+    createEnrichPubTask,
     createMonitorTask,
   ];
   return Bluebird.mapSeries(tasks, (t) => {

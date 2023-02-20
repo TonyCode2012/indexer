@@ -43,6 +43,7 @@ export async function profileMetadataSet(
       coverPicture: getRealImageUri(metadata.coverPicture),
       attributes: metadata.attributes,
       appId: metadata.appId,
+      profileUpdateTS: Dayjs(event.args.timestamp.toNumber()*1000).toISOString(),
     });
   } else {
     await dbOperator.updateProfile({
@@ -120,6 +121,8 @@ export async function postCreated(
   dbOperator: DbOperator,
   event: any
 ): Promise<void> {
+  let content = "";
+  try {
   const pubId = event.args.profileId._hex + "-" + event.args.pubId._hex;
   const profileId = event.args.profileId._hex;
   let content = await processContentUri(event.args.contentURI);
@@ -143,14 +146,20 @@ export async function postCreated(
       { $inc: { "stats.totalPosts": 1 } }
     );
   };
+  } catch (e: any) {
+    console.log(e);
+    console.log("=============== post");
+    console.log(event.args.contentURI);
+  }
 }
 
 export async function commentCreated(
   dbOperator: DbOperator,
   event: any
 ): Promise<void> {
+  let content = "";
+  try {
   const commentedPubId = event.args.profileIdPointed._hex + "-" + event.args.pubIdPointed._hex;
-  // const commentedPub = await GetPublicationById(dbOperator, commentedPubId);
   const pubId = event.args.profileId._hex + "-" + event.args.pubId._hex;
   let content = await processContentUri(event.args.contentURI);
   if (!content) {
@@ -161,7 +170,6 @@ export async function commentCreated(
     _id: pubId,
     __typename: 'Comment',
     profileId: profileId,
-    // appId: commentedPub ? commentedPub.appId : null,
     appId: null,
     commentOn: { id: commentedPubId },
     contentUri: event.args.contentURI,
@@ -170,11 +178,6 @@ export async function commentCreated(
     referenceModule: event.args.referenceModule,
     createdAt: Dayjs(event.args.timestamp.toNumber()*1000).toISOString(),
   };
-  // if (commentedPub) {
-  //   Object.assign(data, { commentOn: { __typename: commentedPub.__typename, id: commentedPub._id } });
-  // } else {
-  //   Object.assign(data, { commentOn: { id: commentedPubId } });
-  // }
   const res = await dbOperator.insertPublication(data);
   if (res && res.acknowledged) {
     await dbOperator.updateProfileEx(
@@ -182,6 +185,10 @@ export async function commentCreated(
       { $inc: { "stats.totalComments": 1 } }
     );
   };
+  } catch (e: any) {
+    console.log(e);
+    console.log(content);
+  }
 }
 
 export async function mirrorCreated(
@@ -189,23 +196,16 @@ export async function mirrorCreated(
   event: any
 ): Promise<void> {
   const mirroredPubId = event.args.profileIdPointed._hex + "-" + event.args.pubIdPointed._hex;
-  // const mirroredPub = await GetPublicationById(dbOperator, mirroredPubId);
   const profileId = event.args.profileId._hex;
   let data = {
     _id: event.args.profileId._hex + "-" + event.args.pubId._hex,
     __typename: 'Mirror',
-    // appId: mirroredPub ? mirroredPub.appId : null,
     appId: null,
     profileId: profileId,
     mirrorOf: { id: mirroredPubId },
     referenceModule: event.args.referenceModule,
     createdAt: Dayjs(event.args.timestamp.toNumber()*1000).toISOString(),
   };
-  // if (mirroredPub) {
-  //   Object.assign(data, { mirrorOf: { __typename: mirroredPub.__typename, id: mirroredPub._id } });
-  // } else {
-  //   Object.assign(data, { mirrorOf: { id: mirroredPubId } });
-  // }
   const res = await dbOperator.insertPublication(data);
   if (res && res.acknowledged) {
     await dbOperator.updateProfileEx(
@@ -343,7 +343,7 @@ export async function followNFTTransferred(
 }
 
 async function processContentUri(uri: string): Promise<any> {
-  if (!uri) {
+  if (typeof uri !== 'string') {
     return null;
   }
   let realUri = uri;
@@ -363,7 +363,7 @@ async function processContentUri(uri: string): Promise<any> {
     logger.error(`Invalid uri:${realUri}`);
     return null;
   }
-  let tryout = 3;
+  let tryout = 2;
   while (--tryout >= 0) {
     try {
       let { data } = await axios.get(realUri, {
@@ -377,7 +377,8 @@ async function processContentUri(uri: string): Promise<any> {
       return data;
     } catch (e: any) {
       if (realUri.startsWith(lensInfraUrl)) {
-        logger.warn(`process uri:${realUri} failed, info:${e}, retry again.`);
+        //logger.warn(`process uri:${realUri} failed, info:${e}, retry again.`);
+        return null;
       } else {
         try {
           const cid = realUri.substring(realUri.lastIndexOf("/") + 1, realUri.length);
@@ -397,9 +398,13 @@ function getRealImageUri(uri: any): string {
     return "";
   }
   let realUri = uri;
+  try {
   if (typeof uri === 'object') {
     if (uri.original) {
       realUri = uri.original.url;
+      while (typeof realUri === 'object' && realUri.original) {
+        realUri = realUri.original.url;
+      }
     } else if (uri.uri) {
       realUri = uri.uri;
     } else {
@@ -412,7 +417,6 @@ function getRealImageUri(uri: any): string {
     "ipfs://",
     "https://ipfs.infura.io/ipfs/",
   ];
-  try {
   for (const iv of invalidUrls) {
     if (realUri.startsWith(iv)) {
       return lensInfraUrl + realUri.substring(iv.length, realUri.length);
@@ -425,21 +429,6 @@ function getRealImageUri(uri: any): string {
     throw new Error('bad uri')
   }
   return realUri;
-}
-
-async function GetPublicationById(
-  dbOperator: DbOperator,
-  pubId: string
-): Promise<any> {
-  let tryout = 5;
-  while (--tryout >= 0) {
-    const res = await dbOperator.getPublicationById(pubId);
-    if (res !== null) {
-      return res;
-    }
-    await Bluebird.delay(2000);
-  }
-  logger.error(`get publication by id:${pubId} failed.`);
 }
 
 async function getProfileByIdFromApi(profileId: string): Promise<any> {
@@ -466,9 +455,10 @@ async function getProfileByIdFromApi(profileId: string): Promise<any> {
         return url;
       })(profile.coverPicture);
     } catch (e: any) {
-      logger.warn(`Get profile:${profileId} from lens api failed, try again`);
+      logger.warn(`Get profile:${profileId} from lens api failed, message:${e}, try again`);
     }
   }
+  logger.error(`Get profile:${profileId} from lens api failed`);
   return null;
 }
 
