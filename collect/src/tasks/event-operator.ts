@@ -121,11 +121,14 @@ export async function postCreated(
   dbOperator: DbOperator,
   event: any
 ): Promise<void> {
-  let content = "";
-  try {
+  let content;
+  let contentURI = null;
   const pubId = event.args.profileId._hex + "-" + event.args.pubId._hex;
   const profileId = event.args.profileId._hex;
-  let content = await processContentUri(event.args.contentURI);
+  try {
+    contentURI = event.args.contentURI;
+    content = await processContentUri(contentURI);
+  } catch (e: any) {}
   if (!content) {
     content = await getPubContentByIdFromApi(pubId);
   }
@@ -134,7 +137,7 @@ export async function postCreated(
     __typename: 'Post',
     profileId: profileId,
     appId: content ? content.appId : null,
-    contentUri: event.args.contentURI,
+    contentUri: contentURI,
     metadata: content,
     collectModule: event.args.collectModule,
     referenceModule: event.args.referenceModule,
@@ -146,22 +149,20 @@ export async function postCreated(
       { $inc: { "stats.totalPosts": 1 } }
     );
   };
-  } catch (e: any) {
-    console.log(e);
-    console.log("=============== post");
-    console.log(event.args.contentURI);
-  }
 }
 
 export async function commentCreated(
   dbOperator: DbOperator,
   event: any
 ): Promise<void> {
-  let content = "";
-  try {
+  let content;
+  let contentURI = null;
   const commentedPubId = event.args.profileIdPointed._hex + "-" + event.args.pubIdPointed._hex;
   const pubId = event.args.profileId._hex + "-" + event.args.pubId._hex;
-  let content = await processContentUri(event.args.contentURI);
+  try {
+    contentURI = event.args.contentURI;
+    content = await processContentUri(contentURI);
+  } catch (e: any) {}
   if (!content) {
     content = await getPubContentByIdFromApi(pubId);
   }
@@ -172,7 +173,7 @@ export async function commentCreated(
     profileId: profileId,
     appId: null,
     commentOn: { id: commentedPubId },
-    contentUri: event.args.contentURI,
+    contentUri: contentURI,
     metadata: content,
     collectModule: event.args.collectModule,
     referenceModule: event.args.referenceModule,
@@ -185,10 +186,6 @@ export async function commentCreated(
       { $inc: { "stats.totalComments": 1 } }
     );
   };
-  } catch (e: any) {
-    console.log(e);
-    console.log(content);
-  }
 }
 
 export async function mirrorCreated(
@@ -360,10 +357,10 @@ async function processContentUri(uri: string): Promise<any> {
     }
   }
   if (!realUri.startsWith("http")) {
-    logger.error(`Invalid uri:${realUri}`);
+    logger.warn(`Invalid uri:${realUri}`);
     return null;
   }
-  let tryout = 2;
+  let tryout = 3;
   while (--tryout >= 0) {
     try {
       let { data } = await axios.get(realUri, {
@@ -376,10 +373,8 @@ async function processContentUri(uri: string): Promise<any> {
       }
       return data;
     } catch (e: any) {
-      if (realUri.startsWith(lensInfraUrl)) {
         //logger.warn(`process uri:${realUri} failed, info:${e}, retry again.`);
-        return null;
-      } else {
+      if (!realUri.startsWith(lensInfraUrl)) {
         try {
           const cid = realUri.substring(realUri.lastIndexOf("/") + 1, realUri.length);
           const tmp = CID.parse(cid)
@@ -454,6 +449,7 @@ async function getProfileByIdFromApi(profileId: string): Promise<any> {
         }
         return url;
       })(profile.coverPicture);
+      return profile;
     } catch (e: any) {
       logger.warn(`Get profile:${profileId} from lens api failed, message:${e}, try again`);
     }

@@ -60,11 +60,10 @@ export async function handleMonitor(
   // const alchemy = new Alchemy(settings);
   // console.log(alchemy)
   const lensIface = new ethers.utils.Interface(LENS_EVENT_ABI);
-  const _fromBlock = fromBlock;
 
   let events: any[] = [];
   let toBlock = 0;
-  logger.info(`Getting blocks from:${fromBlock}...`);
+  logger.info(`Getting block from:${fromBlock}...`);
   try {
     let acc = 5;
     while (--acc >= 0) {
@@ -107,7 +106,7 @@ export async function handleMonitor(
       }
       fromBlock = toBlock;
     }
-    logger.info(`from:${_fromBlock}, to:${toBlock}`);
+    logger.info(`Getting block to:${toBlock}`);
     try {
       await eventHub(context, events, isStopped);
       if (isStopped()) 
