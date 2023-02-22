@@ -13,6 +13,7 @@ export interface DbOperator {
   deleteStop: () => Promise<void>;
   deleteOne: (collName: string, query: any) => Promise<void>;
   deleteMany: (collName: string, query: any) => Promise<void>;
+  updateLensApiQuery: (n: number) => Promise<void>;
   updateProfile: (data: any) => Promise<void>;
   updateProfiles: (query: any, update: any) => Promise<void>;
   updateProfileEx: (query: any, data: any, options?: any) => Promise<void>;

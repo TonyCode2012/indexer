@@ -145,6 +145,20 @@ export function createDBOperator(db: MongoDB): DbOperator {
     await db.dbHandler.collection(collName).deleteMany(collName, query);
   }
 
+  const updateLensApiQuery = async (n: number): Promise<void> => {
+    await db.dbHandler.collection(CURSOR_COLL).updateOne(
+      {
+        _id: 'lensApiQueryNumber'
+      },
+      {
+        $inc: { value: n }
+      },
+      {
+        upsert: true
+      }
+    );
+  }
+
   const updateProfileCursor = async (cursor: any, status?: string): Promise<void> => {
     const query = { _id: 'profile' };
     const updateData = { 
@@ -341,6 +355,16 @@ export function createDBOperator(db: MongoDB): DbOperator {
     return res;
   }
 
+  const getUncompleteProsPubs = async (): Promise<void> => {
+    const pros = await db.dbHandler.collection(PROFILE_COLL).find(
+      { coverPicture: { $exists: false } },
+      { _id: 1 }
+    ).limit(2000).toArray().map((e: any) => e._id);
+
+    const pubs = await db.dbHandler.collection(PUBLICATION_COLL).find(
+    );
+  }
+
   const setSyncedBlockNumber = async (blockNumber: number): Promise<void> => {
     const query = { _id: 'syncedBlock' };
     const updateData = { value: blockNumber };
@@ -475,6 +499,7 @@ export function createDBOperator(db: MongoDB): DbOperator {
     deleteOne,
     deleteMany,
     deleteStop,
+    updateLensApiQuery,
     updateProfile,
     updateProfiles,
     updateProfileEx,

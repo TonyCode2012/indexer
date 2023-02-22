@@ -30,11 +30,12 @@ export async function profileCreated(
 export async function profileMetadataSet(
   dbOperator: DbOperator,
   event: any
-): Promise<void> {
+): Promise<any> {
   let metadata = await processContentUri(event.args.metadata);
-  if (metadata === null) {
-    metadata = await getProfileByIdFromApi(event.args.profileId._hex);
-  }
+  //if (metadata === null) {
+  //  metadata = await getProfileByIdFromApi(event.args.profileId._hex);
+  //  await dbOperator.updateLensApiQuery(1);
+  //}
   if (metadata !== null) {
     await dbOperator.updateProfile({
       _id: event.args.profileId._hex,
@@ -51,6 +52,7 @@ export async function profileMetadataSet(
       metadataUri: event.args.metadata,
     });
   }
+  if (!metadata) return event.args.profileId._hex;
 }
 
 export async function defaultProfileSet(
@@ -120,7 +122,7 @@ export async function followModuleSet(
 export async function postCreated(
   dbOperator: DbOperator,
   event: any
-): Promise<void> {
+): Promise<any> {
   let content;
   let contentURI = null;
   const pubId = event.args.profileId._hex + "-" + event.args.pubId._hex;
@@ -129,9 +131,10 @@ export async function postCreated(
     contentURI = event.args.contentURI;
     content = await processContentUri(contentURI);
   } catch (e: any) {}
-  if (!content) {
-    content = await getPubContentByIdFromApi(pubId);
-  }
+  //if (!content) {
+  //  content = await getPubContentByIdFromApi(pubId);
+  //  await dbOperator.updateLensApiQuery(1);
+  //}
   const res = await dbOperator.insertPublication({
     _id: pubId,
     __typename: 'Post',
@@ -149,12 +152,15 @@ export async function postCreated(
       { $inc: { "stats.totalPosts": 1 } }
     );
   };
+  if (!content) {
+    return pubId;
+  }
 }
 
 export async function commentCreated(
   dbOperator: DbOperator,
   event: any
-): Promise<void> {
+): Promise<any> {
   let content;
   let contentURI = null;
   const commentedPubId = event.args.profileIdPointed._hex + "-" + event.args.pubIdPointed._hex;
@@ -163,9 +169,9 @@ export async function commentCreated(
     contentURI = event.args.contentURI;
     content = await processContentUri(contentURI);
   } catch (e: any) {}
-  if (!content) {
-    content = await getPubContentByIdFromApi(pubId);
-  }
+  //if (!content) {
+  //  content = await getPubContentByIdFromApi(pubId);
+  //}
   const profileId = event.args.profileId._hex;
   let data = {
     _id: pubId,
@@ -186,6 +192,7 @@ export async function commentCreated(
       { $inc: { "stats.totalComments": 1 } }
     );
   };
+  if (!content) return pubId;
 }
 
 export async function mirrorCreated(
@@ -343,48 +350,49 @@ async function processContentUri(uri: string): Promise<any> {
   if (typeof uri !== 'string') {
     return null;
   }
-  let realUri = uri;
-  const lensInfraUrl = "https://lens.infura-ipfs.io/ipfs/";
+  const ipfsBaseUrls = [
+    "https://lens.infura-ipfs.io/ipfs/",
+    "https://ipfs.io/ipfs/"
+  ]
   const invalidUrls = [
     "ipfs://",
     "https://ipfs.infura.io/ipfs/",
   ];
+  let validUrls: string[] = [];
+  if (uri.startsWith("http")) {
+    validUrls.push(uri);
+  }
   // Filter invalid uris
   for (const iv of invalidUrls) {
     if (uri.startsWith(iv)) {
-      realUri = lensInfraUrl + uri.substring(iv.length, uri.length);
+      try {
+        const cid = uri.substring(uri.lastIndexOf("/") + 1, uri.length);
+        CID.parse(cid)
+        for (const baseUrl of ipfsBaseUrls) {
+          validUrls.push(baseUrl + "/" + cid);
+        }
+      } catch (e: any) {}
       break;
     }
   }
-  if (!realUri.startsWith("http")) {
-    logger.warn(`Invalid uri:${realUri}`);
-    return null;
-  }
-  let tryout = 3;
-  while (--tryout >= 0) {
+  // Get data from valid urls
+  for (const url of validUrls) {
     try {
-      let { data } = await axios.get(realUri, {
+      let { data } = await axios.get(url, {
         timeout: HTTP_TIMEOUT,
       });
-      if (!data) return null;
+      if (!data) continue;
       if (data.cover_picture) {
         data.coverPicture = data.cover_picture;
         delete data.cover_picture;
       }
       return data;
     } catch (e: any) {
-        //logger.warn(`process uri:${realUri} failed, info:${e}, retry again.`);
-      if (!realUri.startsWith(lensInfraUrl)) {
-        try {
-          const cid = realUri.substring(realUri.lastIndexOf("/") + 1, realUri.length);
-          const tmp = CID.parse(cid)
-          realUri = lensInfraUrl + "/" + cid;
-        } catch (e: any) {}
-      }
+        //logger.warn(`process uri:${uri} failed, info:${e}, retry again.`);
     }
-    await Bluebird.delay(2000);
+    await Bluebird.delay(1000);
   }
-  // logger.error(`get data from uri:${realUri} failed.`);
+  //logger.error(`get data from uri:${uri} failed, try lens api.`);
   return null;
 }
 
@@ -393,7 +401,6 @@ function getRealImageUri(uri: any): string {
     return "";
   }
   let realUri = uri;
-  try {
   if (typeof uri === 'object') {
     if (uri.original) {
       realUri = uri.original.url;
@@ -417,12 +424,6 @@ function getRealImageUri(uri: any): string {
       return lensInfraUrl + realUri.substring(iv.length, realUri.length);
     }
   }
-  } catch (e: any) {
-    console.log(e);
-    console.log(typeof uri);
-    console.log(realUri)
-    throw new Error('bad uri')
-  }
   return realUri;
 }
 
@@ -433,7 +434,7 @@ async function getProfileByIdFromApi(profileId: string): Promise<any> {
       let { profile } = await getProfile({
         profileId: profileId,
       })
-      if (!profile) return;
+      if (!profile) continue;
       profile.coverPicture = ((pic: any) => {
         if (pic && pic.uri) {
           return pic.uri;
@@ -465,13 +466,14 @@ async function getPubContentByIdFromApi(pubId: string): Promise<any> {
       const { publication } = await queryPublication({
         publicationId: pubId,
       })
+      if (!publication) continue;
       let content = {
         appId: publication?.appId,
       }
       Object.assign(content, publication?.metadata);
       return content;
     } catch (e: any) {
-      logger.warn(`Get publication:${pubId} from lens api failed, try again`);
+      logger.warn(`Get publication:${pubId} from lens api failed, message:${e}, try again`);
     }
   }
   return null;

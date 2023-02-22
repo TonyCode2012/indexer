@@ -24,6 +24,7 @@ import {
   LENS_TOPICS,
   LENS_EVENT_ABI,
   HTTP_TIMEOUT,
+  LENS_DATA_LIMIT,
 } from '../config';
 
 let currentBlock = -1;
@@ -153,6 +154,7 @@ async function eventHub(
   const profileUpdateMap = new Map<string,Map<string,any>>();
   const pubCreatedArry = [];
   const othersArry = [];
+  const othersMap = new Map();
   for (const event of events) {
     const eventName = event.name;
     if (eventName === "ProfileCreated") {
@@ -168,6 +170,12 @@ async function eventHub(
     } else if (pubCreatedSet.has(eventName)) {
       pubCreatedArry.push(event);
     } else {
+      othersMap.set(eventName, othersMap.get(eventName) + 1 || 1);
+      //if (othersMap.get(eventName)) {
+      //  othersMap.get(eventName)++;
+      //} else {
+      //  othersMap.set(eventName, 0)
+      //}
       othersArry.push(event);
     }
   }
@@ -176,10 +184,11 @@ async function eventHub(
     profileUpdateArry.push(...Array.from(m.values()));
   }
 
-  logger.info(`created profile num:${profileCreatedArry.length}`);
-  logger.info(`update profile num:${profileUpdateArry.length}`);
-  logger.info(`created publication num:${pubCreatedArry.length}`);
-  logger.info(`others num:${othersArry.length}`);
+  logger.info(`created profile:${profileCreatedArry.length},`
+            + `updated profile:${profileUpdateArry.length},`
+            + `created publication:${pubCreatedArry.length},`
+            + `others:${JSON.stringify(Object.fromEntries(othersMap))}`);
+            //+ `others:${othersArry.length}`);
 
   // Process 'ProfileCreated' event
   logger.info("Processing profile create...");
@@ -192,21 +201,33 @@ async function eventHub(
 
   // Process profile update related event
   logger.info("Processing profile update...");
+  const uncompletePros: string[] = [];
   await Bluebird.map(profileUpdateArry, async (event: any) => {
     const eventFunc = eventOperator.get(event.name);
     if (!isStopped() && eventFunc !== null && eventFunc !== undefined) {
-      await eventFunc(dbOperator, event)
+      return await eventFunc(dbOperator, event)
     }
   }, { concurrency : MAX_TASK })
+  .each((e: any) => {
+    if (e) uncompletePros.push(e);
+  })
+  await updateProfiles(context, uncompletePros, isStopped);
+  //console.log(`uncomplete profiles:${uncompletePros}`);
 
   // Process publication created related event
   logger.info("Processing publication create...");
+  const uncompletePubs: string[] = [];
   await Bluebird.map(pubCreatedArry, async (event: any) => {
     const eventFunc = eventOperator.get(event.name);
     if (!isStopped() && eventFunc !== null && eventFunc !== undefined) {
-      await eventFunc(dbOperator, event)
+      return await eventFunc(dbOperator, event)
     }
   }, { concurrency : MAX_TASK })
+  .each((e: any) => {
+    if (e) uncompletePubs.push(e);
+  })
+  await updatePublications(context, uncompletePubs, isStopped);
+  //console.log(`uncomplete publications:${uncompletePubs}`);
 
   // Process other event
   logger.info("Processing others...");
@@ -232,4 +253,74 @@ export async function createMonitorTask(
     handleMonitor,
     '👀',
   );
+}
+
+async function updateProfiles(
+  context: AppContext, 
+  profileIds: string[], 
+  isStopped: IsStopped,
+): Promise<void> {
+  const logger = context.logger;
+  const dbOperator = createDBOperator(context.database);
+  let offset = 0;
+  while (offset < profileIds.length && !isStopped()) {
+    try {
+      await Bluebird.delay(1 * 1000);
+      const profiles = await getProfiles({
+        profileIds: profileIds.slice(offset,offset+LENS_DATA_LIMIT),
+        limit: LENS_DATA_LIMIT,
+      });
+      await dbOperator.updateLensApiQuery(1);
+      //await dbOperator.insertProfiles(profiles.items);
+      await Bluebird.map(profiles.items, async (profile: any) => {
+        if (!isStopped()) {
+          dbOperator.updateProfile(profile);
+        }
+      }, { concurrency: MAX_TASK } );
+      offset = offset + LENS_DATA_LIMIT;
+    } catch (e: any) {
+      logger.error(`Get profiles failed,error:${e}`);
+      if (e.statusCode === 404) {
+        break;
+      }
+      if (e.networkError.statusCode === 429) {
+        await Bluebird.delay(5 * 60 * 1000);
+      }
+    }
+  }
+}
+
+async function updatePublications(
+  context: AppContext,
+  pubIds: string[],
+  isStopped: IsStopped
+): Promise<void> {
+  const logger = context.logger;
+  const dbOperator = createDBOperator(context.database);
+  let offset = 0;
+  while (offset < pubIds.length && !isStopped()) {
+    try {
+      await Bluebird.delay(1 * 1000);
+      const { publications } = await queryPublications({
+        publicationIds: pubIds.slice(offset,offset+LENS_DATA_LIMIT),
+        limit: LENS_DATA_LIMIT,
+      });
+      await dbOperator.updateLensApiQuery(1);
+      //await dbOperator.insertPublications(publications.items);
+      await Bluebird.map(publications.items, async (pub: any) => {
+        if (!isStopped()) {
+          dbOperator.updatePublication(pub);
+        }
+      }, { concurrency: MAX_TASK } );
+      offset = offset + LENS_DATA_LIMIT;
+    } catch (e: any) {
+      logger.error(`Get publications failed,error:${e}`);
+      if (e.statusCode === 404) {
+        break;
+      }
+      if (e.networkError.statusCode === 429) {
+        await Bluebird.delay(5 * 60 * 1000);
+      }
+    }
+  }
 }
