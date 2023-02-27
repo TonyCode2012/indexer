@@ -1,4 +1,5 @@
 import Bluebird from 'bluebird';
+import _ from 'lodash';
 import { PublicationTypes } from '../graphql/generated';
 import { queryPublications } from '../operation/get-publications';
 import { makeIntervalTask } from './task-utils';
@@ -29,7 +30,7 @@ export async function getPublication(
   while (true) {
     try {
       await Bluebird.delay(randomRange(1, 5) * 1000);
-      const res = await queryPublications({
+      const { publications } = await queryPublications({
         profileId: id,
         publicationTypes: [ 
           PublicationTypes.Post, 
@@ -39,11 +40,11 @@ export async function getPublication(
         cursor: cursor,
         limit: LENS_DATA_LIMIT,
       })
-      const { items } = res.publications;
+      const { items } = publications;
       await dbOperator.insertPublications(items);
       // Update publication cursor for unexpected crash
-      if (res.publications.pageInfo.next !== null) {
-        cursor = res.publications.pageInfo.next;
+      if (publications.pageInfo.next !== null) {
+        cursor = publications.pageInfo.next;
       }
       await dbOperator.updatePublicationCursor(id, cursor);
       if (items.length < LENS_DATA_LIMIT) {
@@ -59,7 +60,7 @@ export async function getPublication(
       }
     }
   }
-  await dbOperator.updateProfileCursorAndTimestamp(id, cursor, context.timestamp);
+  await dbOperator.updateProfilePullStatus(id, "complete");
   //logger.info(`id:${id},cursor:${cursor} done.`);
 }
 
@@ -69,19 +70,16 @@ export async function handlePublications(
   isStopped: IsStopped,
 ): Promise<void> {
   const dbOperator = createDBOperator(context.database);
-  context.timestamp = await dbOperator.getOrSetLastUpdateTimestamp();
-  context.logger = logger;
+  const subCtx = _.cloneDeep(context);
+  subCtx.logger = logger;
   try {
     const ids = await dbOperator.getProfileIdsWithLimit();
-    if (ids.length === 0) {
-      logger.info('set timestamp');
-      await dbOperator.setLastUpdateTimestamp(getTimestamp());
-    }
+    if (ids.length === 0) return;
     await Bluebird.map(ids, async (id: any) => {
       if (!isStopped()) {
-        await getPublication(context, id)
+        await getPublication(subCtx, id)
       }
-    }, { concurrency : MAX_TASK })
+    }, { concurrency : MAX_TASK } )
   } catch (e: any) {
     logger.error(`handle publication failed, error:${e}`);
   }

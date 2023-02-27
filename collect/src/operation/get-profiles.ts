@@ -1,5 +1,5 @@
 import Bluebird from 'bluebird';
-import { apolloClient } from '../apollo-client';
+import { apolloClientWrapper } from '../apollo-client';
 import {
   ExploreProfilesDocument,
   ExploreProfilesRequest,
@@ -12,37 +12,35 @@ import { logger } from '../utils/logger';
 import { LENS_DATA_LIMIT } from '../config';
 
 export async function exploreProfiles(request: ExploreProfilesRequest) {
-  const res = await apolloClient.query({
+  const res = await apolloClientWrapper.query({
     query: ExploreProfilesDocument,
     variables: {
       request,
     },
   });
-  const data = res.data.exploreProfiles;
-  if (data === null || data === undefined)
+  if (!(res.data && res.data.exploreProfiles))
     throw ({
       statusCode: 404,
       message: 'Explore profiles failed!',
     });
 
-  return data;
+  return res.data.exploreProfiles;
 }
 
 export async function getProfiles(request: ProfileQueryRequest) {
-  const res = await apolloClient.query({
+  const res = await apolloClientWrapper.query({
     query: ProfilesDocument,
     variables: {
       request,
     },
   });
-  const data = res.data.profiles;
-  if (data === null || data === undefined)
+  if (!(res.data && res.data.profiles))
     throw ({
       statusCode: 404,
       message: 'Get profiles failed!',
     });
 
-  return data;
+  return res.data.profiles;
 }
 
 export async function getProfilesByAddress(address: string): Promise<any[]> {

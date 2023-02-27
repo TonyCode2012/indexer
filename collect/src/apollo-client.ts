@@ -12,6 +12,7 @@ import fetch from 'cross-fetch';
 import { LENS_API } from './config';
 import { createChildLogger } from './utils/logger';
 import { getAuthenticationToken } from './state';
+import { DbOperator } from './types/database.d';
 
 const defaultOptions: DefaultOptions = {
   watchQuery: {
@@ -65,3 +66,33 @@ export const apolloClient = new ApolloClient({
   cache: new InMemoryCache(),
   defaultOptions: defaultOptions,
 });
+
+class ApolloClientWrapper {
+  private client: ApolloClient<any>;
+  private dbOperator: DbOperator;
+
+  public constructor(client: ApolloClient<any>) {
+    this.client = client;
+  }
+
+  public setDbOperator(dbOperator: DbOperator) {
+    this.dbOperator = dbOperator;
+  }
+
+  public setApolloClient(client: ApolloClient<any>) {
+    this.client = client;
+  }
+
+  public async query(params: any): Promise<any> {
+    if (!this.dbOperator) {
+      throw new Error('dbOperator is not set!');
+    }
+    if (!this.client) {
+      throw new Error('apolloClient is not set!');
+    }
+    await this.dbOperator.incLensApiQueryCount(1);
+    return this.client.query(params);
+  }
+}
+
+export const apolloClientWrapper = new ApolloClientWrapper(apolloClient);
