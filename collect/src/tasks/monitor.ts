@@ -1,4 +1,5 @@
 import Bluebird from 'bluebird';
+import _ from 'lodash';
 import { ethers } from "ethers";
 import { AppContext } from '../types/context.d';
 import { DbOperator } from '../types/database.d';
@@ -9,19 +10,19 @@ import { Logger } from 'winston';
 import { SimpleTask } from '../types/tasks.d';
 import { IsStopped } from './task-utils';
 import { getTimestamp } from '../utils';
-import { getPublication } from './publication-task';
+import { queryPublications } from '../operation';
 import {
   LENS_DATA_LIMIT,
   LENS_HUB_CONTRACT,
   LENS_PERIPHERY_CONTRACT,
-  LENS_HUB_EVENT_ABI,
-  LENS_PERIPHERY_EVENT_ABI,
-  LENS_HUB_TOPICS,
-  LENS_PERIPHERY_TOPICS,
+  LENS_TOPICS,
+  LENS_EVENT_ABI,
   POLYGON_ENDPOINT,
   MAX_TASK,
 } from '../config';
 
+let currentBlock = -1;
+const axios = require('axios');
 
 export async function handleMonitor(
   context: AppContext,
@@ -30,7 +31,8 @@ export async function handleMonitor(
 ): Promise<void> {
   const db = context.database;
   const dbOperator = createDBOperator(db);
-  context.logger = logger;
+  const subCtx = _.cloneDeep(context)
+  subCtx.logger = logger;
   let fromBlock = await dbOperator.getSyncedBlockNumber();
   if (fromBlock === -1) {
     fromBlock = await dbOperator.getStartBlockNumber();
@@ -39,60 +41,114 @@ export async function handleMonitor(
     }
   }
 
-  const provider = new ethers.providers.JsonRpcProvider(POLYGON_ENDPOINT);
-  const lensHubIface = new ethers.utils.Interface(LENS_HUB_EVENT_ABI);
-  const lensPeripheryIface = new ethers.utils.Interface(LENS_PERIPHERY_EVENT_ABI);
-  let toBlock = fromBlock + 2000;
-  logger.info(`from:${fromBlock}, to:${toBlock}`)
+  const lensIface = new ethers.utils.Interface(LENS_EVENT_ABI);
+  const _fromBlock = fromBlock;
 
+  const events: any[] = [];
+  let toBlock = 0;
+  logger.info(`Getting blocks from:${fromBlock}...`);
   try {
-    const currentBlockNumber = await provider.getBlockNumber();
-    if (toBlock > currentBlockNumber) {
-      toBlock = currentBlockNumber;
-    }
-    const lensHubFilter = {
-      address: LENS_HUB_CONTRACT,
-      topics: [
-        LENS_HUB_TOPICS
-      ],
-      fromBlock: fromBlock,
-      toBlock: toBlock,
-    }
-    const lensPeripheryFilter = {
-      address: LENS_PERIPHERY_CONTRACT,
-      topics: [
-        LENS_PERIPHERY_TOPICS
-      ],
-      fromBlock: fromBlock,
-      toBlock: toBlock,
-    }
-
     let profileIds: string[] = [];
-    // Get lens hub logs
-    const lensHubLogs = await provider.getLogs(lensHubFilter);
-    for (const log of lensHubLogs) {
-      const event = lensHubIface.parseLog(log);
-      profileIds.push(event.args.profileId._hex)
-    }
-    // Get lens periphery logs
-    const lensPeripheryLogs = await provider.getLogs(lensPeripheryFilter);
-    for (const log of lensPeripheryLogs) {
-      const event = lensPeripheryIface.parseLog(log);
-      if (event.args.hasOwnProperty('profileId')) {
-        profileIds.push(event.args.profileId._hex)
-      } else if (event.args.hasOwnProperty('profileIds')) {
-        for (const id of event.args.profileIds) {
-          profileIds.push(id._hex)
+    let pubIds: string[] = [];
+    let acc = 1;
+    while (--acc >= 0) {
+      toBlock = fromBlock + 2000;
+      if (currentBlock === -1 || toBlock > currentBlock) {
+        currentBlock = await getCurrentBlock(subCtx);
+        if (currentBlock === -1) {
+          currentBlock = fromBlock;
         }
       }
+      if (toBlock > currentBlock) {
+        toBlock = currentBlock;
+      }
+      if (toBlock === fromBlock) {
+        break;
+      }
+      const lensFilter = {
+        address: [LENS_HUB_CONTRACT, LENS_PERIPHERY_CONTRACT],
+        topics: [
+          LENS_TOPICS
+        ],
+        fromBlock: "0x".concat(fromBlock.toString(16)),
+        toBlock: "0x".concat(toBlock.toString(16)),
+      }
+      // Get lens logs
+      const lensLogs = await axios.post(
+        POLYGON_ENDPOINT,
+        {
+          id: 1,
+          jsonrpc: "2.0",
+          method: "eth_getLogs",
+          params: [lensFilter]
+        },
+        {
+          "content-type": "application/json",
+        }
+      );
+      for (const log of lensLogs.data.result) {
+        const event = lensIface.parseLog(log);
+        if (event.args.profileId) {
+          profileIds.push(event.args.profileId._hex);
+          if (event.args.pubId) {
+            pubIds.push(event.args.profileId._hex + "-" + event.args.pubId._hex);
+          }
+        }
+        if (event.args.profileIdPointed) {
+          profileIds.push(event.args.profileIdPointed._hex);
+          if (event.args.pubIdPointed) {
+            pubIds.push(event.args.profileIdPointed._hex + "-" + event.args.pubIdPointed._hex);
+          }
+        }
+        if (event.args.rootProfileId) {
+          profileIds.push(event.args.rootProfileId._hex);
+          if (event.args.rootPubId) {
+            pubIds.push(event.args.rootProfileId._hex + "-" + event.args.rootPubId._hex);
+          }
+        }
+        if (event.args.profileIds) {
+          profileIds.push(...event.args.profileIds.map((x: any) => x._hex));
+        }
+      }
+      fromBlock = toBlock;
     }
-    profileIds = Array.from(new Set(profileIds));
-    logger.info(`Get new profile number:${profileIds.length}`);
-    await updateProfiles(context, profileIds, isStopped);
-    await dbOperator.setSyncedBlockNumber(toBlock);
+    logger.info(`from:${_fromBlock}, to:${toBlock}`);
+    try {
+      profileIds = Array.from(new Set(profileIds));
+      pubIds = Array.from(new Set(pubIds));
+      logger.info(`Profile number:${profileIds.length}, publication number:${pubIds.length}`);
+      await updateData(subCtx, profileIds, pubIds, isStopped);
+      if (isStopped()) 
+        throw new Error("Stop record break point due to stopped.");
+      await dbOperator.setSyncedBlockNumber(toBlock);
+    } catch (e: any) {
+      logger.error(`Process lens logs failed, ${e}`);
+    }
   } catch (e: any) {
-    logger.error(`Get logs from polychain failed,error:${e}.`);
+    logger.error(`Get logs from polychain(block range:${fromBlock}~${toBlock}) failed,error:${e}.`);
   }
+}
+
+async function getCurrentBlock(context: AppContext): Promise<number> {
+  const logger = context.logger;
+  let tryout = 10;
+  while (--tryout >= 0) {
+    try {
+      const res = await axios.post(
+        POLYGON_ENDPOINT,
+        {
+          id: 1,
+          jsonrpc: "2.0",
+          method: "eth_blockNumber",
+          params: []
+        }
+      );
+      return parseInt(res.data.result, 16);
+    } catch (e: any) {
+      logger.warn(`Get block number error:${e}`);
+    }
+  }
+  return -1;
 }
 
 export async function createMonitorTask(
@@ -111,6 +167,18 @@ export async function createMonitorTask(
   )
 }
 
+async function updateData(
+  context: AppContext, 
+  profileIds: string[], 
+  pubIds: string[],
+  isStopped: IsStopped,
+): Promise<void> {
+  const promises: Promise<void>[] = [];
+  promises.push(updateProfiles(context, profileIds, isStopped));
+  promises.push(updatePublications(context, pubIds, isStopped));
+  await Bluebird.map(promises, async (promise: any) => await promise );
+}
+
 async function updateProfiles(
   context: AppContext, 
   profileIds: string[], 
@@ -119,36 +187,57 @@ async function updateProfiles(
   const logger = context.logger;
   const dbOperator = createDBOperator(context.database);
   let offset = 0;
-  while (offset < profileIds.length) {
+  while (offset < profileIds.length && !isStopped()) {
     try {
       await Bluebird.delay(1 * 1000);
       const profiles = await getProfiles({
         profileIds: profileIds.slice(offset,offset+LENS_DATA_LIMIT),
         limit: LENS_DATA_LIMIT,
       })
-
-      await dbOperator.insertProfiles(profiles.items);
-
-      if (profiles.items.length < LENS_DATA_LIMIT) {
-        break;
-      }
-
+      //await dbOperator.insertProfiles(profiles.items);
+      await Bluebird.map(profiles.items, async (profile: any) => {
+        if (!isStopped()) {
+          dbOperator.updateProfile(profile);
+        }
+      }, { concurrency: MAX_TASK } );
       offset = offset + LENS_DATA_LIMIT;
     } catch (e: any) {
       logger.error(`Get profiles failed,error:${e}`);
-      if (e.statusCode === 404)
+      if (e.statusCode === 404) {
         break;
-
-      if (e.networkError.statusCode === 429)
+      }
+      if (e.networkError.statusCode === 429) {
         await Bluebird.delay(5 * 60 * 1000);
+      }
     }
   }
+}
 
-  // Update publications
-  context.timestamp = getTimestamp();
-  await Bluebird.map(profileIds, async (id) => {
-    if (!isStopped()) {
-      await getPublication(context, id);
+async function updatePublications(
+  context: AppContext,
+  pubIds: string[],
+  isStopped: IsStopped
+): Promise<void> {
+  const logger = context.logger;
+  const dbOperator = createDBOperator(context.database);
+  let offset = 0;
+  while (offset < pubIds.length && !isStopped()) {
+    try {
+      await Bluebird.delay(1 * 1000);
+      const { publications } = await queryPublications({
+        publicationIds: pubIds.slice(offset,offset+LENS_DATA_LIMIT),
+        limit: LENS_DATA_LIMIT,
+      })
+      await dbOperator.insertPublications(publications.items);
+      offset = offset + LENS_DATA_LIMIT;
+    } catch (e: any) {
+      logger.error(`Get publications failed,error:${e}`);
+      if (e.statusCode === 404) {
+        break;
+      }
+      if (e.networkError.statusCode === 429) {
+        await Bluebird.delay(5 * 60 * 1000);
+      }
     }
-  }, { concurrency: MAX_TASK/2 });
+  }
 }

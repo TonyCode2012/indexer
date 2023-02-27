@@ -17,12 +17,14 @@ export interface DbOperator {
   updateProfileTimestamp: (id: string, timestamp: number) => Promise<void>;
   updatePublicationCursor: (id: string, cursor: string) => Promise<void>;
   updateProfileCursorAndTimestamp: (id: string, cursor: string, timestamp: number) => Promise<void>;
+  updateProfilePullStatus: (id: string, status: string) => Promise<void>;
+  incLensApiQueryCount: (n: number) => Promise<void>;
   setSyncedBlockNumber: (blockNumber: number) => Promise<void>;
   setStartBlockNumber: () => Promise<void>;
   setLastUpdateTimestamp: (timestamp: number) => Promise<void>;
   setStop: () => Promise<void>;
   getStop: () => Promise<boolean>;
-  getProfileCursor: () => Promise<string>;
+  getProfileCursor: () => Promise<any>;
   getPublicationCursor: (id: string) => Promise<string>;
   getProfileIdsWithLimit: (limit?: number) => Promise<string[]>;
   getSyncedBlockNumber: () => Promise<number>;
@@ -31,4 +33,5 @@ export interface DbOperator {
   getWhiteList: () => Promise<string[]>;
   getWhitelistProfileIds: () => Promise<string[]>;
   getOrSetLastUpdateTimestamp: () => Promise<number>;
+  getMissedPublications: (startIndex: number) => Promise<void>;
 }

@@ -12,6 +12,7 @@ import { getTimestamp } from "./utils";
 import { createChildLoggerWith } from "./utils/logger";
 import { createSimpleTasks } from "./tasks";
 import { startAPI } from "./tasks/api-task";
+import { apolloClientWrapper } from "./apollo-client";
 
 const MaxTickTimout = 15 * 1000;
 
@@ -28,6 +29,8 @@ async function main() {
 
   const dbOperator = createDBOperator(db);
   await dbOperator.deleteStop();
+
+  apolloClientWrapper.setDbOperator(dbOperator);
 
   const simpleTasks = await loadSimpleTasks(context);
 

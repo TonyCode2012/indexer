@@ -8,7 +8,7 @@ const dbPools = new Map<string,MongoDB>();
 export async function loadDB(dbName: string): Promise<MongoDB|null> {
   if (dbPools.has(dbName)) {
     const db = dbPools.get(dbName);
-    if (db != undefined)
+    if (db)
       return db;
 
     dbPools.delete(dbName);

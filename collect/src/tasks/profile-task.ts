@@ -17,7 +17,8 @@ async function handleProfiles(
 ): Promise<void> {
   try {
     const dbOperator = createDBOperator(context.database);
-    let cursor = await dbOperator.getProfileCursor();
+    let { value: cursor, status } = await dbOperator.getProfileCursor();
+    if (status === 'complete') return;
     const res = await exploreProfiles({
       sortCriteria: ProfileSortCriteria.CreatedOn,
       cursor: cursor,
@@ -29,10 +30,10 @@ async function handleProfiles(
     if (cursor !== null) {
       await dbOperator.updateProfileCursor(cursor);
     }
-    //if (res.items.length < LENS_DATA_LIMIT) {
-    //  //await dbOperator.updateProfileCursor(cursor, 'complete');
-    //  logger.info(`No more profiles.`);
-    //}
+    if (res.items.length < LENS_DATA_LIMIT) {
+      await dbOperator.updateProfileCursor(cursor, 'complete');
+      //logger.info(`No more profiles.`);
+    }
   } catch(e: any) {
     logger.error(`Get profile error, error:${e}`);
     if (e.networkError && e.networkError.statusCode === 429)

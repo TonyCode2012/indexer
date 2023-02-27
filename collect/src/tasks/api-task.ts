@@ -55,6 +55,10 @@ export async function startAPI(context: AppContext) {
         const profileId = url.searchParams.get('id') || '';
         resBody = await api.addProfile(dbOperator, profileId);
         resCode = resBody.statusCode;
+      } else if ('/missedPubs/add' === route) {
+        const index = parseInt(url.searchParams.get('index') || '1');
+        resBody = await api.addMissedPubs(dbOperator, index);
+        resCode = resBody.statusCode;
       } else {
         resBody = {
           statusCode: 404,

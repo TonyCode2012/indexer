@@ -1,8 +1,10 @@
 import { ethers } from "ethers";
+import Bluebird from 'bluebird';
 import { logger } from '../utils/logger';
 import { loadDB, MongoDB } from '../db';
 import { DbOperator } from '../types/database.d';
 import { getTimestamp } from '../utils';
+import { queryPublications } from '../operation';
 import { 
   POLYGON_ENDPOINT,
   PROFILE_COLL,
@@ -11,6 +13,7 @@ import {
   WHITELIST_COLL,
   ACHIEVEMENT_COLL,
   TASK_COLL,
+  LENS_DATA_LIMIT,
 } from "../config";
 
 export function createDBOperator(db: MongoDB): DbOperator {
@@ -137,10 +140,15 @@ export function createDBOperator(db: MongoDB): DbOperator {
 
   const updateProfileCursor = async (cursor: any, status?: string): Promise<void> => {
     const query = { _id: 'profile' };
-    const updateData = { 
-      value: cursor, 
-      status: status,
-    };
+    const updateData = ((stats: any) => {
+      if (stats) {
+        return { 
+          value: cursor, 
+          status: stats,
+        };
+      }
+      return { value: cursor };
+    })(status);
     const options = { upsert: true }; await db.dbHandler.collection(CURSOR_COLL).updateOne(query, { $set: updateData }, options);
   }
 
@@ -154,7 +162,7 @@ export function createDBOperator(db: MongoDB): DbOperator {
   const updateProfile = async (data: any): Promise<void> => {
     const query = { _id: data._id };
     const options = { upsert: true };
-    await db.dbHandler.collection(PROFILE_COLL).replaceOne(query, data, options);
+    await db.dbHandler.collection(PROFILE_COLL).updateOne(query, { $set: data }, options);
   }
 
   const updateProfileTimestamp = async (id: string, timestamp: number): Promise<void> => {
@@ -172,12 +180,27 @@ export function createDBOperator(db: MongoDB): DbOperator {
     await db.dbHandler.collection(PROFILE_COLL).updateOne(query, { $set: updateData });
   }
 
-  const getProfileCursor = async (): Promise<string> => {
+  const updateProfilePullStatus = async (id: string, status: string): Promise<void> => {
+    await db.dbHandler.collection(PROFILE_COLL).updateOne(
+      { _id: id },
+      { 
+        $set: { pullStatus: status }
+      }
+    );
+  }
+
+  const incLensApiQueryCount = async (n: number): Promise<void> => {
+    const query = { _id: 'lensApiQueryCount' };
+    const options = { upsert: true };
+    await db.dbHandler.collection(CURSOR_COLL).updateOne(query, { $inc: { value: n } }, options);
+  }
+
+  const getProfileCursor = async (): Promise<any> => {
     const cursor = await db.dbHandler.collection(CURSOR_COLL).findOne({_id: 'profile'})
     if (cursor === null)
       return '{}';
 
-    return cursor.value;
+    return cursor;
   }
 
   const getPublicationCursor = async (id: string): Promise<string> => {
@@ -201,15 +224,15 @@ export function createDBOperator(db: MongoDB): DbOperator {
     const items = await db.dbHandler.collection(PROFILE_COLL).find(
       {
         $or: [
-          {publicationCursor: {$exists: false}},
-          {lastUpdateTimestamp: {$exists: false}},
-          {lastUpdateTimestamp: {$lt: lastUpdateTimestamp}},
+          { pullStatus: { $exists: false } },
+          { pullStatus: { $ne: "complete" } }
         ]
       },
       {
         _id: 1,
       }
     ).limit(limit).toArray();
+
     for (const item of items) {
       res.push(item._id);
     }
@@ -305,6 +328,13 @@ export function createDBOperator(db: MongoDB): DbOperator {
     await db.dbHandler.collection(CURSOR_COLL).updateOne(query, { $set: updateData }, options);
   }
 
+  const setUncompletePubCursor = async (cursor: number): Promise<void> => {
+    const query = { _id: 'uncompletePubCursor' };
+    const updateData = { value: cursor };
+    const options = { upsert: true };
+    await db.dbHandler.collection(CURSOR_COLL).updateOne(query, { $set: updateData }, options);
+  }
+
   const getOrSetLastUpdateTimestamp = async (): Promise<number> => {
     const timestamp = await db.dbHandler.collection(CURSOR_COLL).findOne({_id:'timestamp'});
     if (timestamp !== null) {
@@ -332,6 +362,94 @@ export function createDBOperator(db: MongoDB): DbOperator {
     return profileIds;
   }
 
+  const getUncompletePubCursor = async (): Promise<number> => {
+    const res = await db.dbHandler.collection(CURSOR_COLL).findOne({_id:'uncompletePubCursor'});
+    if (!res) {
+      return 1;
+    }
+
+    return res.value;
+  }
+
+  const getMissedPublications = async (startIndex?: number): Promise<void> => {
+    let idIndex = startIndex ?? 1;
+    logger.info(`Start(from index:${idIndex}) to add missed publications, this will take a while...`);
+    const incStep = 50;
+    const profileNum = await db.dbHandler.collection(PROFILE_COLL).estimatedDocumentCount();
+    while (idIndex <= profileNum) {
+      const proIds: string[] = [];
+      for (let i = 0; i < 50; i++, idIndex++) {
+        let tmp = idIndex.toString(16);
+        if (tmp.length % 2 !== 0) {
+          tmp = "0" + tmp;
+        }
+        proIds.push("0x" + tmp);
+      }
+      const fetchedProIds = await db.dbHandler.collection(PROFILE_COLL).find(
+        { _id: { $in: proIds } }
+      )
+      .project(
+        { 
+          _id: 1,
+          totalPubs: "$stats.totalPublications"
+        }
+      ).toArray();
+      logger.info(`Get missed publications, dealed number:${idIndex}.`);
+      const missedPubIds: string[] = [];
+      for (const { _id:proId, totalPubs } of fetchedProIds) {
+        const pubArry= await db.dbHandler.collection(PUBLICATION_COLL).find(
+          { "profile.id": proId },
+          { _id: 1 }
+        ).toArray();
+        const pubIds = pubArry.map((e: any) => {
+          const id = e._id;
+          return Number(id.substring(id.indexOf("-") + 1, id.length));
+        }).sort((a: any, b: any) => { return a - b;});
+        pubIds.push(totalPubs + 1);
+        let curAcc = 0;
+        for (let i = 0; i < pubIds.length - 1; i++) {
+          if (pubIds[i] + 1 != pubIds[i+1]) {
+            for (let id = pubIds[i]+1; id < pubIds[i+1]; id++) {
+              let pubIdPost = id.toString(16);
+              if (pubIdPost.length % 2 !== 0) {
+                pubIdPost = "0" + pubIdPost;
+              }
+              missedPubIds.push(proId + "-0x" + pubIdPost);
+              curAcc++;
+            }
+          }
+        }
+        if (curAcc > 0) logger.info(`profile id:${proId}, missed item number:${curAcc}`);
+      }
+      await addPublications(missedPubIds);
+      logger.info(`Add missed publications num:${missedPubIds.length} successfully.`);
+    }
+    logger.info("Add missed publications successfully.");
+  }
+
+  async function addPublications(pubIds: string[]): Promise<void> {
+    let offset = 0;
+    while (offset < pubIds.length) {
+      try {
+        //await Bluebird.delay(1 * 1000);
+        const { publications } = await queryPublications({
+          publicationIds: pubIds.slice(offset,offset+LENS_DATA_LIMIT),
+          limit: LENS_DATA_LIMIT,
+        })
+        await insertPublications(publications.items);
+        offset = offset + LENS_DATA_LIMIT;
+      } catch (e: any) {
+        logger.error(`Get publications failed,error:${e}`);
+        if (e.statusCode === 404) {
+          break;
+        }
+        if (e.networkError.statusCode === 429) {
+          await Bluebird.delay(5 * 60 * 1000);
+        }
+      }
+    }
+  }
+
   return {
     insertOne,
     insertMany,
@@ -351,6 +469,8 @@ export function createDBOperator(db: MongoDB): DbOperator {
     updateProfileTimestamp,
     updatePublicationCursor,
     updateProfileCursorAndTimestamp,
+    updateProfilePullStatus,
+    incLensApiQueryCount,
     setSyncedBlockNumber,
     setStartBlockNumber,
     setStop,
@@ -365,5 +485,6 @@ export function createDBOperator(db: MongoDB): DbOperator {
     getWhiteList,
     getWhitelistProfileIds,
     getOrSetLastUpdateTimestamp,
+    getMissedPublications,
   }
 }

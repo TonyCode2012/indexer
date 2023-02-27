@@ -49,3 +49,12 @@ export async function addProfile(dbOperator: DbOperator, profileId: string): Pro
     return { statusCode: 500, message: `Internal error,${e}`};
   }
 }
+
+export async function addMissedPubs(dbOperator: DbOperator, index: number): Promise<BaseResponse> {
+  try {
+    dbOperator.getMissedPublications(index);
+    return { statusCode: 200, message: "Add missed publications task successfully." };
+  } catch (e: any) {
+    return { statusCode: 500, message: `Internal error,${e}`};
+  }
+}

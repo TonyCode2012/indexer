@@ -1,5 +1,5 @@
 import Bluebird from 'bluebird';
-import { apolloClient } from '../apollo-client';
+import { apolloClientWrapper } from '../apollo-client';
 import { 
   PublicationsQueryRequest,
   PublicationsDocument,
@@ -10,7 +10,7 @@ import os from 'os';
 const maxTaskNum = os.cpus().length;
 
 export async function queryPublications(request: PublicationsQueryRequest) {
-  const res = await apolloClient.query({
+  const res = await apolloClientWrapper.query({
     query: PublicationsDocument,
     variables: {
       request,
