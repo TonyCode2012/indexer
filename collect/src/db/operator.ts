@@ -378,7 +378,7 @@ export function createDBOperator(db: MongoDB): DbOperator {
     const profileNum = await db.dbHandler.collection(PROFILE_COLL).estimatedDocumentCount();
     while (idIndex <= profileNum) {
       const proIds: string[] = [];
-      for (let i = 0; i < 50; i++, idIndex++) {
+      for (let i = 0; i < incStep; i++, idIndex++) {
         let tmp = idIndex.toString(16);
         if (tmp.length % 2 !== 0) {
           tmp = "0" + tmp;
