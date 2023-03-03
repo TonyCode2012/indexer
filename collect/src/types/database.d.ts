@@ -9,6 +9,8 @@ export interface DbOperator {
   insertProfile: (data: any) => Promise<any>;
   insertProfiles: (data: any[]) => Promise<any>;
   insertPublications: (data: any[]) => Promise<void>;
+  insertDesoProfiles: (data: any[]) => Promise<void>;
+  insertDesoPublications: (data: any[]) => Promise<void>;
   deleteStop: () => Promise<void>;
   deleteOne: (collName: string, query: any) => Promise<void>;
   deleteMany: (collName: string, query: any) => Promise<void>;
@@ -18,6 +20,9 @@ export interface DbOperator {
   updatePublicationCursor: (id: string, cursor: string) => Promise<void>;
   updateProfileCursorAndTimestamp: (id: string, cursor: string, timestamp: number) => Promise<void>;
   updateProfilePullStatus: (id: string, status: string) => Promise<void>;
+  updateDesoProfileCursor: (cursor: any, status?: string) => Promise<void>;
+  updateDesoPublicationCursor: (id: string, cursor: string) => Promise<void>;
+  updateDesoProfilePullStatus: (id: string, status: string) => Promise<void>;
   incLensApiQueryCount: (n: number) => Promise<void>;
   setSyncedBlockNumber: (blockNumber: number) => Promise<void>;
   setStartBlockNumber: () => Promise<void>;
@@ -34,4 +39,7 @@ export interface DbOperator {
   getWhitelistProfileIds: () => Promise<string[]>;
   getOrSetLastUpdateTimestamp: () => Promise<number>;
   getMissedPublications: (startIndex: number) => Promise<void>;
+  getDesoProfileCursor: () => Promise<any>;
+  getDesoProfileIdsWithLimit: (limit?: number) => Promise<string[]>;
+  getDesoPublicationCursor: (id: string) => Promise<string>;
 }

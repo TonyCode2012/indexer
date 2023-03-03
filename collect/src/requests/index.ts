@@ -1,8 +1,7 @@
-import { getProfiles } from '../operation';
-import { LENS_DATA_LIMIT } from '../config';
+import { getProfiles } from '../lens/operation';
 import { BaseResponse } from '../types/api.d';
 import { DbOperator } from '../types/database.d';
-import { getProfilesByAddress } from '../operation';
+import { LENS_DATA_LIMIT } from '../config';
 
 export async function addWhitelist(dbOperator: DbOperator, address: string) {
   try {

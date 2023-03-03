@@ -1,10 +1,10 @@
 import { ethers } from "ethers";
 import Bluebird from 'bluebird';
 import { logger } from '../utils/logger';
-import { loadDB, MongoDB } from '../db';
+import { MongoDB } from '../db';
 import { DbOperator } from '../types/database.d';
 import { getTimestamp } from '../utils';
-import { queryPublications } from '../operation';
+import { queryPublications } from '../lens/operation';
 import { 
   POLYGON_ENDPOINT,
   PROFILE_COLL,
@@ -13,6 +13,8 @@ import {
   WHITELIST_COLL,
   ACHIEVEMENT_COLL,
   TASK_COLL,
+  DESO_PROFILE_COLL,
+  DESO_PUBLICATION_COLL,
   LENS_DATA_LIMIT,
 } from "../config";
 
@@ -143,7 +145,7 @@ export function createDBOperator(db: MongoDB): DbOperator {
     const updateData = ((stats: any) => {
       if (stats) {
         return { 
-          value: cursor, 
+          cursor: cursor, 
           status: stats,
         };
       }
@@ -219,7 +221,6 @@ export function createDBOperator(db: MongoDB): DbOperator {
       limit = 1000;
     }
 
-    const lastUpdateTimestamp = await getOrSetLastUpdateTimestamp();
     const res: string[] = [];
     const items = await db.dbHandler.collection(PROFILE_COLL).find(
       {
@@ -450,6 +451,101 @@ export function createDBOperator(db: MongoDB): DbOperator {
     }
   }
 
+  // --------------- DESO OPERATOR --------------- //
+
+  const insertDesoProfiles = async (data: any[]): Promise<void> => {
+    try {
+      if (data.length === 0) {
+        return;
+      }
+      const options = { ordered: false };
+      return await db.dbHandler.collection(DESO_PROFILE_COLL).insertMany(data, options);
+    } catch (e: any) {
+      if (e.code !== 11000)
+        throw new Error(`Insert deso profiles failed, message:${e}`);
+    }
+  }
+
+  const insertDesoPublications = async (data: any[]): Promise<void> => {
+    try {
+      if (data.length === 0) {
+        return;
+      }
+      const options = { ordered: false };
+      return await db.dbHandler.collection(DESO_PUBLICATION_COLL).insertMany(data, options);
+    } catch (e: any) {
+      if (e.code !== 11000)
+        throw new Error(`Insert deso publications failed, message:${e}`);
+    }
+  }
+
+  const updateDesoProfileCursor = async (cursor: any, status?: string): Promise<void> => {
+    const query = { _id: 'desoProfile' };
+    const updateData = ((stats: any) => {
+      if (stats) {
+        return { 
+          cursor: cursor, 
+          status: stats,
+        };
+      }
+      return { cursor: cursor };
+    })(status);
+    const options = { upsert: true }; await db.dbHandler.collection(CURSOR_COLL).updateOne(query, { $set: updateData }, options);
+  }
+
+  const updateDesoPublicationCursor = async (id: string, cursor: string): Promise<void> => {
+    const query = { _id: id };
+    const updateData = { publicationCursor: cursor };
+    const options = { upsert: true };
+    await db.dbHandler.collection(DESO_PROFILE_COLL).updateOne(query, { $set: updateData }, options);
+  }
+
+  const updateDesoProfilePullStatus = async (id: string, status: string): Promise<void> => {
+    await db.dbHandler.collection(DESO_PROFILE_COLL).updateOne(
+      { _id: id },
+      { 
+        $set: { pullStatus: status }
+      }
+    );
+  }
+
+  const getDesoProfileCursor = async (): Promise<any> => {
+    const cursor = await db.dbHandler.collection(CURSOR_COLL).findOne({_id: 'desoProfile'})
+    if (cursor === null)
+      return '';
+
+    return cursor;
+  }
+
+  const getDesoProfileIdsWithLimit = async (limit?: number): Promise<string[]> => {
+    let _limit = limit ?? 1000;
+
+    const items = await db.dbHandler.collection(DESO_PROFILE_COLL).find(
+      {
+        $or: [
+          { pullStatus: { $exists: false } },
+          { pullStatus: { $ne: "complete" } }
+        ]
+      },
+      {
+        _id: 1,
+      }
+    ).limit(_limit).toArray();
+
+    return items.map((e: any) => e._id);
+  }
+
+  const getDesoPublicationCursor = async (id: string): Promise<string> => {
+    const cursor = await db.dbHandler.collection(DESO_PROFILE_COLL).findOne({_id: id});
+    if (cursor === null)
+      return '';
+
+    if (!cursor.publicationCursor)
+      return '';
+
+    return cursor.publicationCursor;
+  }
+
   return {
     insertOne,
     insertMany,
@@ -461,6 +557,8 @@ export function createDBOperator(db: MongoDB): DbOperator {
     insertProfile,
     insertProfiles,
     insertPublications,
+    insertDesoProfiles,
+    insertDesoPublications,
     deleteOne,
     deleteMany,
     deleteStop,
@@ -470,6 +568,9 @@ export function createDBOperator(db: MongoDB): DbOperator {
     updatePublicationCursor,
     updateProfileCursorAndTimestamp,
     updateProfilePullStatus,
+    updateDesoProfileCursor,
+    updateDesoPublicationCursor,
+    updateDesoProfilePullStatus,
     incLensApiQueryCount,
     setSyncedBlockNumber,
     setStartBlockNumber,
@@ -486,5 +587,8 @@ export function createDBOperator(db: MongoDB): DbOperator {
     getWhitelistProfileIds,
     getOrSetLastUpdateTimestamp,
     getMissedPublications,
+    getDesoProfileCursor,
+    getDesoProfileIdsWithLimit,
+    getDesoPublicationCursor,
   }
 }

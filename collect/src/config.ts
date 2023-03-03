@@ -3,15 +3,15 @@ import path from 'path';
 import { ethers } from "ethers";
 
 const fileLensHub = fs.readFileSync(
-  path.join(__dirname, 'abis/lens-hub-contract-abi.json'),
+  path.join(__dirname, 'lens/abis/lens-hub-contract-abi.json'),
   'utf8'
 );
 const fileLensPeriphery = fs.readFileSync(
-  path.join(__dirname, 'abis/lens-periphery-data-provider.json'),
+  path.join(__dirname, 'lens/abis/lens-periphery-data-provider.json'),
   'utf8'
 );
 const fileFollowNFT = fs.readFileSync(
-  path.join(__dirname, 'abis/lens-follow-nft-contract-abi.json'),
+  path.join(__dirname, 'lens/abis/lens-follow-nft-contract-abi.json'),
   'utf8'
 );
 
@@ -73,7 +73,8 @@ export const PORT = getParamOrExit('PORT');
 
 export const mongoServURI = getParamOrExit('MONGO_SERVER_URI');
 
-export const LENS_DATA_LIMIT = parseInt(getParamOrExit('LENS_DATA_LIMIT'));
+export const LENS_DATA_LIMIT = parseInt(getParam('LENS_DATA_LIMIT') || '50');
+export const DESO_DATA_LIMIT = parseInt(getParam('DESO_DATA_LIMIT') || '100');
 
 export const MAX_TASK = parseInt(getParamOrExit('MAX_TASK'));
 
@@ -90,11 +91,14 @@ export const ACHIEVEMENT_COLL = 'achievement';
 export const AI_COLL = 'ai';
 export const TASK_COLL = 'task';
 export const APP_COLL = 'app';
-export const ACHV_TMPL_COLL = 'achv_tmpl'
-export const BENEFIT_TMPL_COLL = 'benefit_tmpl'
-export const TASK_TMPL_COLL = 'task_tmpl'
+export const ACHV_TMPL_COLL = 'achv_tmpl';
+export const BENEFIT_TMPL_COLL = 'benefit_tmpl';
+export const TASK_TMPL_COLL = 'task_tmpl';
 
-//export const POLYGON_ENDPOINT = "https://billowing-silent-friday.matic.discover.quiknode.pro/1d4fafb9f0722f3d64de51b10ab032bc0b1da6ee/";
+export const DESO_PROFILE_COLL = 'deso_profile';
+export const DESO_PUBLICATION_COLL = 'deso_publication';
+
+export const DESO_ENDPOINT = getParamOrExit('DESO_RPC_URL');
 export const POLYGON_ENDPOINT = getParamOrExit('POLYGON_RPC_URL');
 export const LENS_HUB_EVENT_ABI = [
   "event PostCreated(uint256 indexed profileId,uint256 indexed pubId,string contentURI,address collectModule,bytes collectModuleReturnData,address referenceModule,bytes referenceModuleReturnData,uint256 timestamp)",

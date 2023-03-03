@@ -9,8 +9,7 @@ import { AppContext } from './types/context.d';
 import { SimpleTask } from './types/tasks.d';
 import { timeout } from "./utils/promise-utils";
 import { getTimestamp } from "./utils";
-import { createChildLoggerWith } from "./utils/logger";
-import { createSimpleTasks } from "./tasks";
+import { createTasks } from "./tasks";
 import { startAPI } from "./tasks/api-task";
 import { apolloClientWrapper } from "./apollo-client";
 
@@ -61,7 +60,7 @@ async function main() {
 }
 
 async function loadSimpleTasks(context: AppContext): Promise<SimpleTask[]> {
-  const tasks = await createSimpleTasks(context);
+  const tasks = await createTasks(context);
   return tasks;
 }
 

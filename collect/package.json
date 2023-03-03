@@ -1,17 +1,16 @@
 {
-  "name": "lens-hub",
+  "name": "data-hub",
   "version": "1.0.0",
   "description": "ts examples in how to call the API",
   "license": "GPL-3.0",
   "scripts": {
     "debug": "env-cmd -f .env nodemon src/main.ts",
-    "start": "cp -r src/abis build/src && env-cmd -f .env node --trace-warnings build/src/main.js",
+    "start": "cp -r src/lens/abis build/src/lens/ && env-cmd -f .env ts-node build/src/main.js",
     "build": "tsc -p ./",
 
     "generate": "graphql-codegen",
     "profiles": "env-cmd -f .env ts-node ./src/operation/get-profiles",
     "publications": "env-cmd -f .env ts-node ./src/operation/get-publications",
-    "test": "env-cmd -f .env ts-node ./src/indexer/index",
     "explore:explore-publications": "env-cmd -f .env ts-node ./src/explore/explore-publications"
   },
   "authors": [

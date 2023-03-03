@@ -1,4 +1,3 @@
-import { MongoDB } from '../db';
 import { AppContext } from '../types/context.d';
 import { Dayjs } from '../utils/datetime';
 import {
@@ -8,7 +7,6 @@ import {
 import {
   PROFILE_COLL,
   PUBLICATION_COLL,
-  CURSOR_COLL,
 } from "../config";
 
 export const AchievementsTmpls = {

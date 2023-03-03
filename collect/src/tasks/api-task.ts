@@ -1,9 +1,8 @@
 import { createHttpTerminator } from 'http-terminator';
-import { PORT } from '../config';
 import { AppContext } from '../types/context.d';
 import { DbOperator } from '../types/database.d';
-import { BaseResponse } from '../types/api.d';
 import { createDBOperator } from '../db/operator';
+import { PORT } from '../config';
 import * as api from '../requests';
 
 const http = require('http');
